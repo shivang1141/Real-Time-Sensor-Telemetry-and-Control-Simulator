@@ -1,4 +1,5 @@
 add_library(telemetry_core
+    common/logger.cpp
     common/telemetry_message.cpp
 )
 
