@@ -1,0 +1,9 @@
+build/
+out/
+cmake-build-*/
+compile_commands.json
+.cache/
+.vscode/
+.idea/
+*.log
+benchmarks/results/raw/
