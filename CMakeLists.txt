@@ -26,3 +26,8 @@ include(cmake/CompilerOptions.cmake)
 include(cmake/Dependencies.cmake)
 
 add_subdirectory(src)
+
+if(TELEMETRY_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
