@@ -2,6 +2,7 @@ add_library(telemetry_core
     common/logger.cpp
     common/telemetry_message.cpp
     protocol/protocol.cpp
+    net/socket.cpp
 )
 
 target_include_directories(telemetry_core
