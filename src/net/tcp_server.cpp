@@ -104,7 +104,7 @@ void TcpServer::accept_one() {
         }
         logger_.error(kComponent, "accept_failed", {{"error", std::strerror(error)}});
         if (error == EMFILE || error == ENFILE) {
-            // Out of descriptors: back of instead of spinning on a permanently readable
+            // Out of descriptors: back off instead of spinning on a permanently readable
             // listening socket.
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
