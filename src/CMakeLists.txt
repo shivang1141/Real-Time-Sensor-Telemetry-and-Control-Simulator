@@ -5,6 +5,8 @@ add_library(telemetry_core
     net/socket.cpp
     net/tcp_client.cpp
     net/tcp_server.cpp
+    metrics/latency_histogram.cpp
+    metrics/metrics.cpp
 )
 
 target_include_directories(telemetry_core
