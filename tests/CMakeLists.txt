@@ -6,6 +6,7 @@ target_include_directories(telemetry_test_support INTERFACE ${CMAKE_CURRENT_SOUR
 add_executable(unit_tests
     unit/test_protocol.cpp
     unit/test_line_framer.cpp
+    unit/test_bounded_queue.cpp
 )
 
 add_executable(integration_tests
