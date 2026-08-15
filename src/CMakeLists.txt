@@ -7,6 +7,8 @@ add_library(telemetry_core
     net/tcp_server.cpp
     metrics/latency_histogram.cpp
     metrics/metrics.cpp
+    processing/events.cpp
+    processing/anomaly_detector.cpp
 )
 
 target_include_directories(telemetry_core
