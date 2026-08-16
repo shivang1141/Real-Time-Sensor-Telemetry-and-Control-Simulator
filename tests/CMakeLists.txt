@@ -8,6 +8,7 @@ add_executable(unit_tests
     unit/test_line_framer.cpp
     unit/test_bounded_queue.cpp
     unit/test_anomaly_detector.cpp
+    unit/test_sensor_registry.cpp
     unit/test_latency_histogram.cpp
 )
 
