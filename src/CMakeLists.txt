@@ -9,6 +9,7 @@ add_library(telemetry_core
     metrics/metrics.cpp
     processing/events.cpp
     processing/anomaly_detector.cpp
+    processing/sensor_registry.cpp
 )
 
 target_include_directories(telemetry_core
