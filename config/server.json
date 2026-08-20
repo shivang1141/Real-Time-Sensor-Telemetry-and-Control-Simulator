@@ -1,0 +1,35 @@
+{
+  // Central server configuration. Every field is optional; omitted fields use defaults.
+  // Unknown fields are rejected to catch typos.
+  "network": {
+    "bind_address": "0.0.0.0",
+    "port": 9000,
+    "backlog": 128,
+    "max_connections": 256,
+    "max_frame_bytes": 1024,
+    "recv_buffer_bytes": 16384,
+    "idle_timeout_ms": 30000
+  },
+  "processing": {
+    "workers": 2,
+    "queue_capacity_per_worker": 4096,
+    "stale_check_interval_ms": 250,
+    "simulated_work_us": 0
+  },
+  "detection": {
+    "stale_after_ms": 2000,
+    "trend_window": 20,
+    "min_trend_samples": 10,
+    "rate_interval_ms": 500,
+    "max_future_skew_ms": 5000,
+    "max_message_age_ms": 60000,
+    "thresholds": {
+      "temperature":     { "valid_min": -60,  "valid_max": 200,   "crit_low": -20,  "warn_low": 0,    "warn_high": 85,   "crit_high": 105,  "hysteresis": 1.0, "max_rate_per_s": 20,   "max_trend_per_s": 2.0 },
+      "pressure":        { "valid_min": 0,    "valid_max": 500,   "crit_low": 80,   "warn_low": 90,   "warn_high": 115,  "crit_high": 130,  "hysteresis": 1.0, "max_rate_per_s": 30,   "max_trend_per_s": 5.0 },
+      "motor_speed":     { "valid_min": 0,    "valid_max": 20000, "crit_low": 200,  "warn_low": 1000, "warn_high": 6000, "crit_high": 7500, "hysteresis": 50,  "max_rate_per_s": 2000, "max_trend_per_s": 300 },
+      "signal_strength": { "valid_min": -130, "valid_max": 0,     "crit_low": -100, "warn_low": -85,  "warn_high": -20,  "crit_high": -10,  "hysteresis": 1.0, "max_rate_per_s": 30,   "max_trend_per_s": 5.0 }
+    }
+  },
+  "logging": { "level": "info", "file": "" },
+  "status": { "interval_ms": 1000, "max_listed_sensors": 10 }
+}

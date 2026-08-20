@@ -1,5 +1,6 @@
 add_library(telemetry_core
     common/logger.cpp
+    common/json_reader.cpp
     common/telemetry_message.cpp
     protocol/protocol.cpp
     net/socket.cpp
@@ -11,6 +12,7 @@ add_library(telemetry_core
     processing/anomaly_detector.cpp
     processing/sensor_registry.cpp
     processing/processing_engine.cpp
+    app/server_config.cpp
 )
 
 target_include_directories(telemetry_core
