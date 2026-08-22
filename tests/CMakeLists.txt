@@ -10,6 +10,7 @@ add_executable(unit_tests
     unit/test_anomaly_detector.cpp
     unit/test_sensor_registry.cpp
     unit/test_latency_histogram.cpp
+    unit/test_status_reporter.cpp
 )
 
 add_executable(integration_tests
