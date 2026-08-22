@@ -13,6 +13,7 @@ add_library(telemetry_core
     processing/sensor_registry.cpp
     processing/processing_engine.cpp
     app/server_config.cpp
+    app/telemetry_service.cpp
 )
 
 target_include_directories(telemetry_core
