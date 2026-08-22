@@ -26,6 +26,7 @@ include(cmake/CompilerOptions.cmake)
 include(cmake/Dependencies.cmake)
 
 add_subdirectory(src)
+add_subdirectory(apps)
 
 if(TELEMETRY_BUILD_TESTS)
     enable_testing()
