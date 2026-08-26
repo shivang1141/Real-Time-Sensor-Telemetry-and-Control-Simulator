@@ -15,6 +15,7 @@ add_library(telemetry_core
     app/server_config.cpp
     app/telemetry_service.cpp
     app/status_reporter.cpp
+    sim/sensor_model.cpp
 )
 
 target_include_directories(telemetry_core
