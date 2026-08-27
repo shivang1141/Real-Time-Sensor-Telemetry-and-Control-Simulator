@@ -1,0 +1,13 @@
+{
+  // Healthy fleet: 12 sensors with noise and slow drift, no injected faults.
+  "server": { "host": "127.0.0.1", "port": 9000 },
+  "seed": 42,
+  "duration_s": 0,
+  "stats_interval_ms": 5000,
+  "groups": [
+    { "id_prefix": "temp",  "type": "temperature",     "count": 4, "rate_hz": 10, "nominal": 25,    "noise_stddev": 0.3, "drift_amplitude": 3,   "drift_period_s": 60 },
+    { "id_prefix": "press", "type": "pressure",        "count": 3, "rate_hz": 20, "nominal": 101.3, "noise_stddev": 0.4, "drift_amplitude": 2,   "drift_period_s": 45 },
+    { "id_prefix": "motor", "type": "motor_speed",     "count": 3, "rate_hz": 50, "nominal": 3000,  "noise_stddev": 15,  "drift_amplitude": 200, "drift_period_s": 30 },
+    { "id_prefix": "rssi",  "type": "signal_strength", "count": 2, "rate_hz": 5,  "nominal": -60,   "noise_stddev": 1.5, "drift_amplitude": 5,   "drift_period_s": 90 }
+  ]
+}
