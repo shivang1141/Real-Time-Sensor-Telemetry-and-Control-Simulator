@@ -2,3 +2,6 @@ add_executable(telemetry_server server/main.cpp)
 target_include_directories(telemetry_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(telemetry_server PRIVATE telemetry_core telemetry_warnings)
 
+add_executable(sensor_sim sensor_sim/main.cpp)
+target_include_directories(sensor_sim PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(sensor_sim PRIVATE telemetry_core telemetry_warnings)
