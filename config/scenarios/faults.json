@@ -1,0 +1,31 @@
+{
+  // Fault showcase. Each group demonstrates one failure mode; timings are chosen so the
+  // whole story plays out in ~40 seconds:
+  //   temp-ok      healthy reference sensors
+  //   temp-spike   occasional spikes -> crit/rate-of-change alarms and out-of-range rejects
+  //   temp-ramp    starts overheating at t=8s -> trend, then warn_high, then crit_high
+  //   press-silent goes silent at t=10s for 8s -> stale, then recovers
+  //   motor-drop   connection drops at t=12s for 6s -> stale + reconnect + sequence gap
+  //   motor-fault  reports status=fault from t=15s
+  //   rssi-lossy   10% packet loss, 5% malformed frames, 10% delayed sends
+  "server": { "host": "127.0.0.1", "port": 9000 },
+  "seed": 7,
+  "duration_s": 40,
+  "stats_interval_ms": 5000,
+  "groups": [
+    { "id_prefix": "temp-ok", "type": "temperature", "count": 2, "rate_hz": 10, "nominal": 25, "noise_stddev": 0.3 },
+    { "id_prefix": "temp-spike", "type": "temperature", "count": 1, "rate_hz": 10, "nominal": 25, "noise_stddev": 0.3,
+      "faults": { "spike_probability": 0.02, "spike_magnitude": 120 } },
+    { "id_prefix": "temp-ramp", "type": "temperature", "count": 1, "rate_hz": 10, "nominal": 60, "noise_stddev": 0.2,
+      "faults": { "ramp_after_s": 8, "ramp_rate_per_s": 3.0 } },
+    { "id_prefix": "press-silent", "type": "pressure", "count": 1, "rate_hz": 20, "nominal": 101.3, "noise_stddev": 0.3,
+      "faults": { "fail_after_s": 10, "fail_duration_s": 8, "fail_mode": "silent" } },
+    { "id_prefix": "motor-drop", "type": "motor_speed", "count": 1, "rate_hz": 50, "nominal": 3000, "noise_stddev": 10,
+      "faults": { "fail_after_s": 12, "fail_duration_s": 6, "fail_mode": "disconnect" } },
+    { "id_prefix": "motor-fault", "type": "motor_speed", "count": 1, "rate_hz": 20, "nominal": 3000, "noise_stddev": 10,
+      "faults": { "fail_after_s": 15, "fail_mode": "fault_status" } },
+    { "id_prefix": "rssi-lossy", "type": "signal_strength", "count": 2, "rate_hz": 20, "nominal": -60, "noise_stddev": 1.0,
+      "faults": { "drop_probability": 0.10, "malformed_probability": 0.05,
+                  "delay_probability": 0.10, "delay_min_ms": 20, "delay_max_ms": 200 } }
+  ]
+}
