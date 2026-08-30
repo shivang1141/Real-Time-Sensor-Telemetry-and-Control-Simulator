@@ -17,6 +17,7 @@ add_executable(unit_tests
 add_executable(integration_tests
     integration/test_tcp_server.cpp
     integration/test_telemetry_service.cpp
+    integration/test_simulator.cpp
 )
 
 foreach(target unit_tests integration_tests)
