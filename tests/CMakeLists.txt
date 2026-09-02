@@ -12,6 +12,7 @@ add_executable(unit_tests
     unit/test_latency_histogram.cpp
     unit/test_status_reporter.cpp
     unit/test_sensor_model.cpp
+    unit/test_logger.cpp
 )
 
 add_executable(integration_tests
