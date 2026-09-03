@@ -11,7 +11,7 @@
     "idle_timeout_ms": 30000
   },
   "processing": {
-    "workers": 2,
+    "workers": 4,
     "queue_capacity_per_worker": 4096,
     "stale_check_interval_ms": 250,
     "simulated_work_us": 0
