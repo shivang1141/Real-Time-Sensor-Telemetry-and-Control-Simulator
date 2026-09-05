@@ -44,6 +44,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang libgtest-dev nlohmann-json3-dev
+      - name: Reduce ASLR entropy for ThreadSanitizer
+        if: matrix.preset == 'tsan'
+        # Recent kernels use 32 bits of mmap randomization, which older TSan runtimes
+        # cannot map around ("unexpected memory mapping").
+        run: sudo sysctl vm.mmap_rnd_bits=28
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
       - name: Build
