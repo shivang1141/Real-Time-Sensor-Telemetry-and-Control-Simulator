@@ -1,0 +1,24 @@
+# Runs the server and a simulated sensor fleet in separate containers.
+#
+#   docker compose up --build
+#   SIM_CONFIG=scenarios/faults.json docker compose up      # fault-injection scenario
+#
+# The simulator reconnects with exponential backoff, so start order does not matter.
+services:
+  server:
+    build: .
+    image: sensor-telemetry:latest
+    command: ["--config", "/etc/telemetry/server.json", "--status-interval-ms", "2000"]
+    ports:
+      - "9000:9000"
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+
+  simulator:
+    image: sensor-telemetry:latest
+    depends_on:
+      - server
+    entrypoint: ["sensor_sim"]
+    command: ["--config", "/etc/telemetry/${SIM_CONFIG:-simulator.json}", "--host", "server",
+              "--duration", "0", "--log-level", "warn"]
+    stop_signal: SIGINT
