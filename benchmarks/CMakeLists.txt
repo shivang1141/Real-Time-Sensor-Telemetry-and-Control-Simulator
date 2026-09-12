@@ -1,0 +1,6 @@
+add_executable(bench_components bench_components.cpp)
+target_link_libraries(bench_components PRIVATE telemetry_core telemetry_warnings)
+
+add_executable(telemetry_loadgen loadgen.cpp)
+target_link_libraries(telemetry_loadgen PRIVATE telemetry_core telemetry_warnings)
+target_include_directories(telemetry_loadgen PRIVATE ${PROJECT_SOURCE_DIR}/apps)
