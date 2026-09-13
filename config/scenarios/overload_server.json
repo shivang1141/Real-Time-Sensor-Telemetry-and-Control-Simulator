@@ -1,0 +1,8 @@
+{
+  // Server deliberately under-provisioned to demonstrate queue saturation and the
+  // drop-newest policy: one worker, 200 us of simulated work per message (max ~5,000
+  // msg/s) and small queues. Pair with config/scenarios/many_sensors.json (~10,000 msg/s).
+  "network": { "port": 9000 },
+  "processing": { "workers": 1, "queue_capacity_per_worker": 1024, "simulated_work_us": 200 },
+  "logging": { "level": "warn" }
+}

@@ -11,6 +11,7 @@ add_executable(unit_tests
     unit/test_sensor_registry.cpp
     unit/test_latency_histogram.cpp
     unit/test_status_reporter.cpp
+    unit/test_config.cpp
     unit/test_sensor_model.cpp
     unit/test_logger.cpp
 )

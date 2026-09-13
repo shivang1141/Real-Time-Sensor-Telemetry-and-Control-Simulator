@@ -1,0 +1,11 @@
+{
+  // Scale test: 200 sensors (200 TCP connections) at 50 Hz = ~10,000 msg/s offered.
+  "server": { "host": "127.0.0.1", "port": 9000 },
+  "seed": 1,
+  "duration_s": 30,
+  "stats_interval_ms": 5000,
+  "groups": [
+    { "id_prefix": "temp",  "type": "temperature", "count": 100, "rate_hz": 50, "nominal": 25,   "noise_stddev": 0.3 },
+    { "id_prefix": "motor", "type": "motor_speed", "count": 100, "rate_hz": 50, "nominal": 3000, "noise_stddev": 10 }
+  ]
+}
