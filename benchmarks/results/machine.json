@@ -1,0 +1,1 @@
+{"cpu": "12th Gen Intel(R) Core(TM) i5-1245U", "logical_cpus": 12, "mem_gib": 7.6, "kernel": "6.6.87.2-microsoft-standard-WSL2", "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"}
