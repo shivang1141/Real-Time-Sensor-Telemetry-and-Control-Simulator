@@ -60,7 +60,7 @@ synchronization inventory, protocol, failure behavior and the shutdown sequence.
 
 ## Quick start
 
-Prerequisities: Ubuntu 22.04/24.04 (or WSL2), a C++17 compiler (GCC ≥ 11 or Clang ≥ 14),
+Prerequisites: Ubuntu 22.04/24.04 (or WSL2), a C++17 compiler (GCC ≥ 11 or Clang ≥ 14),
 CMake ≥ 3.22, Ninja.
 
 ```bash
