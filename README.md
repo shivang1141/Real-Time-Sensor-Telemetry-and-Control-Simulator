@@ -24,22 +24,19 @@ failing sensors, and reports system health, throughput and latency.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    subgraph SIM["sensor_sim"]
-        S1["sensor thread"] & S2["sensor thread"] & S3["sensor thread"]
-    end
-    subgraph SRV["telemetry_server"]
-        direction LR
-        A["acceptor"] --> C["connection threads<br/>recv · frame · decode"]
-        C -- "hash(sensor_id)" --> Q[["bounded shard queues"]]
-        Q --> W["workers<br/>validate · detect · track"]
-        W --> E["events → structured log"]
-        C & W --> M[("metrics")]
-        M --> R["status report"]
-    end
-    S1 & S2 & S3 -- "TCP · NDJSON" --> C
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/system-overview-dark.svg">
+  <img src="docs/system-overview.svg" alt="How it works: simulated sensors send readings over TCP; the server receives and checks each message, routes it to a queue by sensor, worker threads analyze it and raise alarms, and results are reported as alarms, metrics and a status report. It handles bad data, overload, silent sensors and shutdown." width="100%">
+</picture>
+
+<details>
+<summary><b>Detailed design</b>: every thread, queue and source file</summary>
+<br>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
+  <img src="docs/architecture.svg" alt="System architecture: sensor_sim threads send NDJSON over TCP to telemetry_server, where connection threads frame and decode bytes, ProcessingEngine routes each message by hash of its sensor id to a bounded shard queue, one worker per shard validates it and runs anomaly detection, and metrics, the status reporter and the main thread observe and control the process" width="100%">
+</picture>
+</details>
 
 * **Network layer.** One acceptor thread and one thread per connection. Each connection
   thread reads with `poll` and `recv` and splits the byte stream with a `LineFramer` that

@@ -1,0 +1,212 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="940" viewBox="0 0 1400 940" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
+<title id="title">System architecture</title>
+<desc id="desc">sensor_sim threads send NDJSON over TCP to telemetry_server. Connection threads frame and decode bytes, ProcessingEngine routes each message by hash of its sensor id to a bounded shard queue, and one worker per shard validates it and runs anomaly detection. Metrics, the status reporter and the main thread observe and control the process.</desc>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8b949e"/></marker>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#f85149"/></marker>
+  <style>
+    .t{fill:#e6edf3}.m{fill:#9198a1}.d{fill:#6e7681}
+    .h{font-size:15px;font-weight:700}.b{font-size:12.5px;font-weight:600}.s{font-size:11px}.xs{font-size:10px}
+    .mono{font-family:Consolas, "SF Mono", Menlo, monospace}
+    .box{fill:#161b22;stroke:#30363d;stroke-width:1.2}
+    .w{stroke:#8b949e;stroke-width:1.5;fill:none;marker-end:url(#a)}
+    .wr{stroke:#f85149;stroke-width:1.3;fill:none;stroke-dasharray:4 3;marker-end:url(#ar)}
+    .wd{stroke:#6e7681;stroke-width:1.2;fill:none;stroke-dasharray:3 3;marker-end:url(#a)}
+  </style>
+</defs>
+<rect width="1400" height="940" rx="14" fill="#0d1117"/>
+
+<text x="40" y="46" class="t" font-size="22" font-weight="700">System architecture</text>
+<text x="40" y="68" class="m s">Two processes, five layers, one message path. Each box names the source file that implements it.</text>
+<g class="s m" transform="translate(860,40)">
+  <rect x="0" y="0" width="12" height="12" rx="3" fill="#12261e" stroke="#3fb950"/><text x="18" y="10">sim</text>
+  <rect x="60" y="0" width="12" height="12" rx="3" fill="#0d2235" stroke="#4493f8"/><text x="78" y="10">net</text>
+  <rect x="118" y="0" width="12" height="12" rx="3" fill="#0b2a2a" stroke="#39c5cf"/><text x="136" y="10">protocol</text>
+  <rect x="200" y="0" width="12" height="12" rx="3" fill="#221a33" stroke="#ab7df8"/><text x="218" y="10">processing</text>
+  <rect x="294" y="0" width="12" height="12" rx="3" fill="#2b1d10" stroke="#f0883e"/><text x="312" y="10">metrics</text>
+  <rect x="374" y="0" width="12" height="12" rx="3" fill="#1c2129" stroke="#8b949e"/><text x="392" y="10">app</text>
+  <text x="0" y="30" class="xs d">dashed red = rejected or dropped, and always counted</text>
+</g>
+
+<!-- ============ sensor_sim ============ -->
+<rect x="40" y="90" width="290" height="560" rx="12" fill="#0f1913" stroke="#3fb950" stroke-dasharray="6 4"/>
+<text x="58" y="116" class="t h">sensor_sim</text><text x="58" y="133" class="m s mono">apps/sensor_sim · src/sim</text>
+
+<rect x="58" y="148" width="254" height="34" rx="8" class="box"/>
+<text x="70" y="169" class="m s mono">config/simulator.json · scenarios/</text>
+<path d="M185 182v14" class="w"/>
+<rect x="58" y="198" width="254" height="46" rx="8" fill="#12261e" stroke="#3fb950"/>
+<text x="70" y="217" class="t b">Simulator</text><text x="70" y="234" class="m s">one thread per sensor, seeded per sensor</text>
+<path d="M120 244v18M250 244v18" class="w"/>
+
+<rect x="58" y="264" width="254" height="118" rx="9" class="box"/>
+<text x="70" y="284" class="t b">sensor thread</text><text x="300" y="284" class="d xs mono" text-anchor="end">absolute deadlines</text>
+<rect x="70" y="293" width="230" height="44" rx="6" fill="#12261e" stroke="#3fb950" stroke-opacity=".6"/>
+<text x="80" y="310" class="t s"><tspan font-weight="600">SensorModel</tspan>  nominal + drift + noise</text>
+<text x="80" y="327" class="m xs">faults: spike · ramp · drop · malformed · delay</text>
+<rect x="70" y="343" width="230" height="30" rx="6" fill="#0d2235" stroke="#4493f8" stroke-opacity=".6"/>
+<text x="80" y="362" class="t s"><tspan font-weight="600">TcpClient</tspan>  send_all · reconnect + backoff</text>
+<rect x="58" y="392" width="254" height="44" rx="9" class="box"/>
+<text x="70" y="411" class="t b">sensor thread</text><text x="70" y="427" class="m xs">fail modes: silent · disconnect · status=fault</text>
+<text x="185" y="458" class="m s" text-anchor="middle">× N   (12 healthy · 9 fault showcase · 200 load)</text>
+
+<rect x="58" y="566" width="254" height="66" rx="9" fill="#161b22" stroke="#30363d" stroke-dasharray="4 3"/>
+<text x="70" y="586" class="t b">loadgen</text><text x="300" y="586" class="d xs mono" text-anchor="end">benchmarks/</text>
+<text x="70" y="603" class="m s">separate-process load generator</text>
+<text x="70" y="619" class="m s">for throughput and latency runs</text>
+
+<!-- wire -->
+<path d="M312 322 C 350 322, 350 230, 398 230" class="w"/>
+<path d="M312 414 C 350 414, 350 240, 398 240" class="w"/>
+<path d="M312 598 C 360 598, 352 250, 398 250" class="wd"/>
+<rect x="336" y="268" width="46" height="62" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="359" y="288" class="t xs" text-anchor="middle" font-weight="700">TCP</text>
+<text x="359" y="303" class="m xs" text-anchor="middle">:9000</text>
+<text x="359" y="320" class="m xs" text-anchor="middle">NDJSON</text>
+
+<!-- ============ telemetry_server ============ -->
+<rect x="400" y="90" width="960" height="560" rx="12" fill="#0f141a" stroke="#8b949e" stroke-dasharray="6 4"/>
+<text x="418" y="116" class="t h">telemetry_server</text><text x="560" y="116" class="m s mono">apps/server · TelemetryService wires the layers (src/app/telemetry_service.cpp)</text>
+
+<g class="s" font-weight="700" letter-spacing="1">
+<rect x="418" y="134" width="6" height="138" rx="3" fill="#4493f8"/><text x="434" y="152" fill="#4493f8">NETWORK</text>
+<rect x="418" y="290" width="6" height="184" rx="3" fill="#ab7df8"/><text x="434" y="304" fill="#ab7df8">PROCESSING</text>
+<rect x="418" y="492" width="6" height="140" rx="3" fill="#f0883e"/><text x="434" y="508" fill="#f0883e">OBSERVE · CONTROL</text>
+</g>
+
+<!-- network lane -->
+<rect x="434" y="164" width="170" height="96" rx="9" fill="#0d2235" stroke="#4493f8"/>
+<text x="446" y="184" class="t b">acceptor thread</text>
+<text x="446" y="202" class="m s">poll(listen fd, stop eventfd)</text>
+<text x="446" y="218" class="m s">accept4 · max_connections</text>
+<text x="446" y="250" class="d xs mono">net/tcp_server.cpp</text>
+<path d="M604 212h32" class="w"/><text x="620" y="204" class="d xs" text-anchor="middle">spawns</text>
+
+<rect x="644" y="148" width="440" height="128" rx="9" fill="none" stroke="#4493f8" stroke-opacity=".35"/>
+<rect x="638" y="142" width="440" height="128" rx="9" fill="#0d2235" stroke="#4493f8"/>
+<text x="652" y="162" class="t b">connection thread × N</text><text x="1066" y="162" class="d xs mono" text-anchor="end">one per client</text>
+<rect x="652" y="172" width="110" height="80" rx="7" fill="#161b22" stroke="#4493f8" stroke-opacity=".6"/>
+<text x="662" y="192" class="t s" font-weight="600">poll · recv</text><text x="662" y="208" class="m xs">16 KiB buffer</text><text x="662" y="222" class="m xs">idle timeout</text><text x="662" y="242" class="d xs mono">net/socket.cpp</text>
+<path d="M762 212h18" class="w"/>
+<rect x="782" y="172" width="130" height="80" rx="7" fill="#0b2a2a" stroke="#39c5cf"/>
+<text x="792" y="192" class="t s" font-weight="600">LineFramer</text><text x="792" y="208" class="m xs">split on '\n'</text><text x="792" y="222" class="m xs">≤ max_frame_bytes</text><text x="792" y="242" class="d xs mono">line_framer.hpp</text>
+<path d="M912 212h18" class="w"/>
+<rect x="932" y="172" width="138" height="80" rx="7" fill="#0b2a2a" stroke="#39c5cf"/>
+<text x="942" y="192" class="t s" font-weight="600">decode</text><text x="942" y="208" class="m xs">JSON → TelemetryMessage</text><text x="942" y="222" class="m xs">fields · id · type · finite</text><text x="942" y="242" class="d xs mono">protocol.cpp</text>
+
+<rect x="1110" y="160" width="232" height="58" rx="9" fill="#2d1517" stroke="#f85149" stroke-opacity=".7"/>
+<text x="1122" y="182" fill="#f85149" class="b">rejected at the edge</text>
+<text x="1122" y="200" class="m s">malformed · oversized frames</text>
+<path d="M1070 196 C 1090 196, 1092 189, 1108 189" class="wr"/>
+
+<!-- processing lane -->
+<path d="M1001 252 V284 H560 V312" class="w"/>
+<rect x="434" y="314" width="170" height="100" rx="9" fill="#221a33" stroke="#ab7df8"/>
+<text x="446" y="334" class="t b">ProcessingEngine</text>
+<text x="446" y="352" class="m s">shard = hash(id) % N</text>
+<text x="446" y="368" class="m s">try_push, never blocks</text>
+<text x="446" y="384" class="m s">per-sensor order kept</text>
+<text x="446" y="404" class="d xs mono">processing_engine.cpp</text>
+<path d="M520 414v14" class="wr"/>
+<rect x="434" y="430" width="170" height="34" rx="8" fill="#2d1517" stroke="#f85149" stroke-opacity=".7"/>
+<text x="446" y="451" fill="#f85149" class="s" font-weight="600">queue full → newest dropped</text>
+
+<path d="M604 334 C 625 334, 625 322, 646 322" class="w"/><path d="M604 364 C 625 364, 625 368, 646 368" class="w"/><path d="M604 394 C 625 394, 625 430, 646 430" class="w"/>
+<rect x="648" y="306" width="190" height="32" rx="7" fill="#161b22" stroke="#ab7df8" stroke-opacity=".7"/>
+<text x="658" y="326" class="t s mono">shard 0</text>
+<g fill="#ab7df8" opacity=".75"><rect x="752" y="314" width="8" height="16" rx="2"/><rect x="764" y="314" width="8" height="16" rx="2"/><rect x="776" y="314" width="8" height="16" rx="2"/></g>
+<rect x="648" y="352" width="190" height="32" rx="7" fill="#161b22" stroke="#ab7df8" stroke-opacity=".7"/>
+<text x="658" y="372" class="t s mono">shard 1</text>
+<g fill="#ab7df8" opacity=".75"><rect x="752" y="360" width="8" height="16" rx="2"/></g>
+<text x="743" y="404" class="m s" text-anchor="middle">⋮</text>
+<rect x="648" y="414" width="190" height="32" rx="7" fill="#161b22" stroke="#ab7df8" stroke-opacity=".7"/>
+<text x="658" y="434" class="t s mono">shard N-1</text>
+<g fill="#ab7df8" opacity=".75"><rect x="752" y="422" width="8" height="16" rx="2"/><rect x="764" y="422" width="8" height="16" rx="2"/></g>
+<text x="648" y="464" class="d xs mono">BoundedQueue · mutex + 2 condvars</text>
+
+<path d="M838 322h28M838 368h28M838 430h28" class="w"/>
+<rect x="874" y="306" width="280" height="166" rx="9" fill="none" stroke="#ab7df8" stroke-opacity=".35"/>
+<rect x="868" y="300" width="280" height="166" rx="9" fill="#221a33" stroke="#ab7df8"/>
+<text x="880" y="320" class="t b">worker × N</text><text x="1140" y="320" class="d xs mono" text-anchor="end">pop_batch(64)</text>
+<g class="s">
+<rect x="880" y="330" width="256" height="24" rx="5" fill="#161b22" stroke="#30363d"/><text x="890" y="346" class="t">1  validate: range · timestamps · order</text>
+<rect x="880" y="358" width="256" height="24" rx="5" fill="#161b22" stroke="#30363d"/><text x="890" y="374" class="t">2  sequence-gap check</text><text x="1128" y="374" class="d xs mono" text-anchor="end">SensorRegistry</text>
+<rect x="880" y="386" width="256" height="24" rx="5" fill="#161b22" stroke="#30363d"/><text x="890" y="402" class="t">3  trend window (least squares)</text>
+<rect x="880" y="414" width="256" height="40" rx="5" fill="#161b22" stroke="#30363d"/><text x="890" y="430" class="t">4  AnomalyDetector</text><text x="1128" y="430" class="d xs mono" text-anchor="end">edge-triggered</text>
+<text x="904" y="446" class="m xs">limits + hysteresis · rate · trend · fault · stale</text>
+</g>
+<path d="M1148 384h40" class="w"/>
+<rect x="1190" y="350" width="152" height="68" rx="9" fill="#161b22" stroke="#8b949e"/>
+<text x="1202" y="370" class="t b">events</text><text x="1202" y="387" class="m s">raised / cleared</text><text x="1202" y="406" class="d xs mono">LoggingEventSink</text>
+
+<!-- observe lane -->
+<path d="M1000 466 V494 H640 V516" class="wd"/>
+<text x="652" y="488" class="d xs">counters + latency from every thread</text>
+<rect x="434" y="520" width="250" height="112" rx="9" fill="#2b1d10" stroke="#f0883e"/>
+<text x="446" y="540" class="t b">Metrics</text>
+<text x="446" y="558" class="m s">relaxed atomic counters</text>
+<text x="446" y="574" class="m s">wait-free LatencyHistogram</text>
+<text x="446" y="590" class="m s">recv · processed · invalid · dropped</text>
+<text x="446" y="620" class="d xs mono">src/metrics</text>
+
+<path d="M684 576h28" class="w"/>
+<rect x="714" y="520" width="230" height="112" rx="9" fill="#1c2129" stroke="#8b949e"/>
+<text x="726" y="540" class="t b">StatusReporter</text>
+<text x="726" y="558" class="m s">1 Hz status block: throughput,</text>
+<text x="726" y="574" class="m s">latency p50/p95/p99, queue depth,</text>
+<text x="726" y="590" class="m s">sensor states, active alarms</text>
+<text x="726" y="620" class="d xs mono">app/status_reporter.cpp</text>
+
+<path d="M972 576h-26" class="w"/>
+<rect x="974" y="520" width="368" height="112" rx="9" fill="#1c2129" stroke="#8b949e"/>
+<text x="986" y="540" class="t b">main thread</text><text x="1330" y="540" class="d xs mono" text-anchor="end">apps/server/main.cpp</text>
+<text x="986" y="558" class="m s">sigtimedwait(SIGINT, SIGTERM): no async handlers</text>
+<text x="986" y="574" class="m s">shutdown: stop listener → signal stop eventfd →</text>
+<text x="986" y="590" class="m s">close conns → drain every queue → join → summary</text>
+<text x="986" y="620" class="d xs mono">ServerConfig: config/server.json, unknown keys rejected</text>
+
+<!-- ============ bottom band ============ -->
+<rect x="40" y="676" width="430" height="230" rx="12" fill="#161b22" stroke="#30363d"/>
+<text x="58" y="702" class="t h">Wire protocol</text><text x="452" y="702" class="m s" text-anchor="end">one JSON object per line</text>
+<rect x="58" y="716" width="394" height="54" rx="7" fill="#1c2129" stroke="#30363d"/>
+<text x="68" y="738" class="t xs mono">{"id":"temp-001","seq":42,"status":"ok",</text>
+<text x="68" y="756" class="t xs mono"> "ts":1729500000123456,"type":"temperature","value":21.5}</text>
+<g class="m s">
+<text x="58" y="794">• frames capped at max_frame_bytes; framer memory bounded</text>
+<text x="58" y="814">• partial reads and writes handled; MSG_NOSIGNAL</text>
+<text x="58" y="834">• seq per sensor: gaps reveal loss and reconnects</text>
+<text x="58" y="854">• types: temperature · pressure · motor_speed · signal_strength</text>
+<text x="58" y="874">• status: ok · degraded · fault</text>
+</g>
+
+<rect x="490" y="676" width="430" height="230" rx="12" fill="#161b22" stroke="#30363d"/>
+<text x="508" y="702" class="t h">Layers</text><text x="902" y="702" class="m s" text-anchor="end">dependencies point down only</text>
+<rect x="508" y="716" width="394" height="34" rx="7" fill="#1c2129" stroke="#8b949e"/>
+<text x="520" y="737" class="t s"><tspan font-weight="700">app</tspan>   TelemetryService · ServerConfig · StatusReporter</text>
+<g class="s">
+<rect x="508" y="758" width="94" height="58" rx="7" fill="#0d2235" stroke="#4493f8"/><text x="518" y="780" class="t" font-weight="700">net</text><text x="518" y="798" class="m xs">sockets, server</text>
+<rect x="608" y="758" width="94" height="58" rx="7" fill="#0b2a2a" stroke="#39c5cf"/><text x="618" y="780" class="t" font-weight="700">protocol</text><text x="618" y="798" class="m xs">framer, codec</text>
+<rect x="708" y="758" width="94" height="58" rx="7" fill="#221a33" stroke="#ab7df8"/><text x="718" y="780" class="t" font-weight="700">processing</text><text x="718" y="798" class="m xs">queues, rules</text>
+<rect x="808" y="758" width="94" height="58" rx="7" fill="#2b1d10" stroke="#f0883e"/><text x="818" y="780" class="t" font-weight="700">metrics</text><text x="818" y="798" class="m xs">counters, hist.</text>
+</g>
+<rect x="508" y="824" width="394" height="34" rx="7" fill="#161b22" stroke="#8b949e"/>
+<text x="520" y="845" class="t s"><tspan font-weight="700">common</tspan>   Clock · Logger · TelemetryMessage · JsonReader</text>
+<text x="508" y="880" class="m s">net only moves bytes: it hands frames to a ConnectionHandler</text>
+<text x="508" y="896" class="m s">and never sees telemetry types. The detector has no I/O or clock.</text>
+
+<rect x="940" y="676" width="420" height="230" rx="12" fill="#161b22" stroke="#30363d"/>
+<text x="958" y="702" class="t h">Verification</text><text x="1342" y="702" class="m s" text-anchor="end">CI on push to main and every PR</text>
+<g class="s">
+<rect x="958" y="716" width="384" height="40" rx="7" fill="#1c2129" stroke="#30363d"/>
+<text x="970" y="741" class="t"><tspan font-weight="700">114 tests</tspan>  92 unit · 22 integration (real TCP on loopback)</text>
+<g transform="translate(958,766)">
+<rect width="118" height="30" rx="15" fill="#12261e" stroke="#3fb950"/><text x="59" y="20" text-anchor="middle" fill="#3fb950" font-weight="600">gcc · clang</text>
+<rect x="124" width="128" height="30" rx="15" fill="#12261e" stroke="#3fb950"/><text x="188" y="20" text-anchor="middle" fill="#3fb950" font-weight="600">Debug · Release</text>
+<rect x="258" width="126" height="30" rx="15" fill="#12261e" stroke="#3fb950"/><text x="321" y="20" text-anchor="middle" fill="#3fb950" font-weight="600">ASan+UBSan · TSan</text>
+</g>
+<text x="958" y="824" class="m">• Docker image build runs the full suite</text>
+<text x="958" y="844" class="m">• benchmarks/: micro-benchmarks + loadgen</text>
+<text x="958" y="864" class="m">• queue optimization: 1.8–3.3× throughput, p50 −94%</text>
+<text x="958" y="884" class="m">• perf profile: JSON parsing ≈ 25–30% of CPU</text>
+</g>
+</svg>

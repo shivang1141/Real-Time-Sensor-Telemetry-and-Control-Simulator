@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="600" viewBox="0 0 1400 600" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">How the system works</title>
+<desc id="d">Simulated sensors send readings over TCP to the server. The server receives and checks each message, routes it to a queue by sensor, worker threads analyze it and raise alarms, and results are reported as alarms, metrics and a status report.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker></defs>
+<rect width="1400" height="600" rx="16" fill="#ffffff"/>
+<text x="36" y="52" font-size="26" font-weight="700" fill="#1f2328">How it works</text>
+<text x="36" y="78" font-size="14.5" fill="#59636e">Two programs. A sensor reading travels left to right in about 160 microseconds.</text>
+<rect x="24" y="102" width="254" height="260" rx="14" fill="#fafbfc" stroke="#d0d7de" stroke-dasharray="6 5"/>
+<text x="38" y="121" font-size="12.5" font-weight="600" fill="#59636e" letter-spacing=".4">Program 1 · sensor_sim</text>
+<rect x="301" y="102" width="1085" height="260" rx="14" fill="#fafbfc" stroke="#d0d7de" stroke-dasharray="6 5"/>
+<text x="315" y="121" font-size="12.5" font-weight="600" fill="#59636e" letter-spacing=".4">Program 2 · telemetry_server</text>
+<rect x="36" y="132" width="230" height="192" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+<rect x="36" y="132" width="230" height="5" rx="2.5" fill="#1a7f37"/>
+<rect x="54" y="154" width="52" height="52" rx="12" fill="#dafbe1"/>
+<g transform="translate(60,160)"><circle cx="10" cy="30" r="3.8" fill="#1a7f37"/><path d="M10 20a10 10 0 0 1 10 10M10 12a18 18 0 0 1 18 18" fill="none" stroke="#1a7f37" stroke-width="2.4" stroke-linecap="round"/></g>
+<text x="248" y="176" font-size="13" font-weight="700" fill="#818b98" text-anchor="end">1</text>
+<text x="54" y="236" font-size="19" font-weight="700" fill="#1f2328">Sensors</text>
+<text x="54" y="262" font-size="14" fill="#59636e">Simulated sensors send a</text>
+<text x="54" y="282" font-size="14" fill="#59636e">reading 10–50 times a second</text>
+<text x="54" y="348" font-size="11.5" fill="#1a7f37" font-family="Consolas, Menlo, monospace">sensor_sim · thread per sensor</text>
+<path d="M272 228h33" stroke="#8c959f" stroke-width="2" marker-end="url(#ah)"/>
+<text x="289.5" y="218" font-size="11.5" font-weight="700" fill="#59636e" text-anchor="middle">TCP</text>
+<rect x="313" y="132" width="230" height="192" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+<rect x="313" y="132" width="230" height="5" rx="2.5" fill="#0969da"/>
+<rect x="331" y="154" width="52" height="52" rx="12" fill="#ddf4ff"/>
+<g transform="translate(337,160)"><path d="M6 22l5-12h18l5 12v10H6z" fill="none" stroke="#0969da" stroke-width="2.2" stroke-linejoin="round"/><path d="M6 22h9l2 4h6l2-4h9" fill="none" stroke="#0969da" stroke-width="2.2" stroke-linejoin="round"/></g>
+<text x="525" y="176" font-size="13" font-weight="700" fill="#818b98" text-anchor="end">2</text>
+<text x="331" y="236" font-size="19" font-weight="700" fill="#1f2328">Receive</text>
+<text x="331" y="262" font-size="14" fill="#59636e">Reads each connection and</text>
+<text x="331" y="282" font-size="14" fill="#59636e">throws away broken messages</text>
+<text x="331" y="348" font-size="11.5" fill="#0969da" font-family="Consolas, Menlo, monospace">TCP · poll · recv · framing</text>
+<path d="M549 228h33" stroke="#8c959f" stroke-width="2" marker-end="url(#ah)"/>
+<rect x="590" y="132" width="230" height="192" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+<rect x="590" y="132" width="230" height="5" rx="2.5" fill="#1b7c83"/>
+<rect x="608" y="154" width="52" height="52" rx="12" fill="#d8f3f0"/>
+<g transform="translate(614,160)"><circle cx="9" cy="20" r="3.5" fill="#1b7c83"/><path d="M13 20h6M19 20l12-10M19 20h12M19 20l12 10" fill="none" stroke="#1b7c83" stroke-width="2.2" stroke-linecap="round"/><circle cx="32" cy="10" r="2.5" fill="#1b7c83"/><circle cx="32" cy="20" r="2.5" fill="#1b7c83"/><circle cx="32" cy="30" r="2.5" fill="#1b7c83"/></g>
+<text x="802" y="176" font-size="13" font-weight="700" fill="#818b98" text-anchor="end">3</text>
+<text x="608" y="236" font-size="19" font-weight="700" fill="#1f2328">Route</text>
+<text x="608" y="262" font-size="14" fill="#59636e">Each sensor always goes to the</text>
+<text x="608" y="282" font-size="14" fill="#59636e">same queue, so order is kept</text>
+<text x="608" y="348" font-size="11.5" fill="#1b7c83" font-family="Consolas, Menlo, monospace">hash(sensor id) → queue</text>
+<path d="M826 228h33" stroke="#8c959f" stroke-width="2" marker-end="url(#ah)"/>
+<rect x="867" y="132" width="230" height="192" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+<rect x="867" y="132" width="230" height="5" rx="2.5" fill="#8250df"/>
+<rect x="885" y="154" width="52" height="52" rx="12" fill="#fbefff"/>
+<g transform="translate(891,160)"><path d="M5 31l7-8 6 5 8-11" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="15" r="8" fill="none" stroke="#8250df" stroke-width="2.2"/><path d="M33 21l5 5" stroke="#8250df" stroke-width="2.6" stroke-linecap="round"/></g>
+<text x="1079" y="176" font-size="13" font-weight="700" fill="#818b98" text-anchor="end">4</text>
+<text x="885" y="236" font-size="19" font-weight="700" fill="#1f2328">Analyze</text>
+<text x="885" y="262" font-size="14" fill="#59636e">Workers check limits, trends</text>
+<text x="885" y="282" font-size="14" fill="#59636e">and gaps, and raise alarms</text>
+<text x="885" y="348" font-size="11.5" fill="#8250df" font-family="Consolas, Menlo, monospace">one worker thread per queue</text>
+<path d="M1103 228h33" stroke="#8c959f" stroke-width="2" marker-end="url(#ah)"/>
+<rect x="1144" y="132" width="230" height="192" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+<rect x="1144" y="132" width="230" height="5" rx="2.5" fill="#bc4c00"/>
+<rect x="1162" y="154" width="52" height="52" rx="12" fill="#fff1e5"/>
+<g transform="translate(1168,160)"><path d="M12 28V19a8 8 0 0 1 16 0v9l3 3H9z" fill="none" stroke="#bc4c00" stroke-width="2.2" stroke-linejoin="round"/><path d="M17 34a3 3 0 0 0 6 0" fill="none" stroke="#bc4c00" stroke-width="2.2" stroke-linecap="round"/></g>
+<text x="1356" y="176" font-size="13" font-weight="700" fill="#818b98" text-anchor="end">5</text>
+<text x="1162" y="236" font-size="19" font-weight="700" fill="#1f2328">Report</text>
+<text x="1162" y="262" font-size="14" fill="#59636e">Alarms, live metrics and a</text>
+<text x="1162" y="282" font-size="14" fill="#59636e">status report every second</text>
+<text x="1162" y="348" font-size="11.5" fill="#bc4c00" font-family="Consolas, Menlo, monospace">logs · counters · latency</text>
+<rect x="24" y="418" width="1352" height="150" rx="14" fill="#f6f8fa" stroke="#d0d7de"/>
+<text x="46" y="452" font-size="16" font-weight="700" fill="#1f2328">Built to handle failure</text>
+<path d="M46.0 488l5 5 9-11" fill="none" stroke="#1a7f37" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="70.0" y="495" font-size="15" font-weight="600" fill="#1f2328">Bad data</text>
+<text x="70.0" y="519" font-size="13.5" fill="#59636e">rejected before it uses any queue space</text>
+<path d="M373.0 488l5 5 9-11" fill="none" stroke="#1a7f37" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="397.0" y="495" font-size="15" font-weight="600" fill="#1f2328">Too much traffic</text>
+<text x="397.0" y="519" font-size="13.5" fill="#59636e">extra messages dropped and counted;</text>
+<text x="397.0" y="538" font-size="13.5" fill="#59636e">nothing freezes</text>
+<path d="M700.0 488l5 5 9-11" fill="none" stroke="#1a7f37" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="724.0" y="495" font-size="15" font-weight="600" fill="#1f2328">A sensor goes quiet</text>
+<text x="724.0" y="519" font-size="13.5" fill="#59636e">flagged as stale after 2 seconds</text>
+<path d="M1027.0 488l5 5 9-11" fill="none" stroke="#1a7f37" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1051.0" y="495" font-size="15" font-weight="600" fill="#1f2328">Shutdown</text>
+<text x="1051.0" y="519" font-size="13.5" fill="#59636e">finishes every queued message, then</text>
+<text x="1051.0" y="538" font-size="13.5" fill="#59636e">exits cleanly</text>
+</svg>
