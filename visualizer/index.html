@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telemetry Pipeline Visualizer</title>
+<meta name="description" content="Interactive model of a multi-threaded C++17 sensor telemetry server: TCP framing, sharded queues, workers and anomaly detection, animated message by message.">
+<style>
+:root{
+  --bg:#0a0e14;--panel:#111821;--panel2:#0d131b;--line:#1e2a38;--line2:#2a3a4d;--hi:#2d4560;
+  --text:#e6edf3;--muted:#8193a8;--dim:#56677b;
+  --accent:#4da3ff;--ok:#3fb950;--warn:#e3b341;--crit:#f85149;--fault:#b48cff;--stale:#7d8796;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg)}
+body{color:var(--text);font:13px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif;padding:16px;min-height:100vh}
+.mono{font-family:"Cascadia Mono",ui-monospace,SFMono-Regular,Consolas,Menlo,monospace}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+
+/* header */
+header{display:flex;align-items:center;gap:14px 18px;margin-bottom:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand h1{font-size:17px;font-weight:600;letter-spacing:.2px;white-space:nowrap}
+.brand small{display:block;color:var(--muted);font-size:11.5px}
+.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#1d4e89,#4da3ff);display:grid;place-items:center;flex:none}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px}
+.seg button{padding:5px 11px;border-radius:6px;color:var(--muted);font-size:12px;background:none;border:0}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:#1c2a3b;color:var(--text);box-shadow:inset 0 0 0 1px var(--hi)}
+.ctrls{display:flex;gap:6px;align-items:center}
+.btn{height:32px;min-width:32px;border-radius:8px;border:1px solid var(--line2);background:var(--panel);display:inline-grid;place-items:center;padding:0 10px;font-size:12px;white-space:nowrap}
+.btn:hover{border-color:var(--hi);background:#16202c}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#04111f;font-weight:600}
+.btn.primary:hover{background:#6db4ff}
+.btn.on{background:#1c2a3b;border-color:var(--accent);color:var(--accent)}
+select.btn{appearance:none;padding:0 10px;text-align:center}
+.timeline{flex:1 1 320px;display:flex;align-items:center;gap:12px;min-width:260px}
+.track{position:relative;flex:1;height:34px;cursor:pointer}
+.track .bar{position:absolute;left:0;right:0;top:15px;height:4px;background:var(--line);border-radius:2px}
+.track .fill{position:absolute;left:0;top:15px;height:4px;background:var(--accent);border-radius:2px}
+.track .knob{position:absolute;top:10px;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(77,163,255,.25);pointer-events:none}
+.mk{position:absolute;top:0;font-size:9.5px;transform:translateX(-50%);white-space:nowrap;background:none;border:0;padding:0 2px;line-height:12px}
+.mk::after{content:"";position:absolute;left:50%;top:14px;width:2px;height:8px;margin-left:-1px;border-radius:1px;background:currentColor}
+.mk.low{top:22px}.mk.low::after{top:-7px;height:7px}
+.mk:hover{text-decoration:underline}
+.clock{font-size:20px;font-weight:600;min-width:118px;text-align:right;white-space:nowrap}
+.clock small{font-size:12px;color:var(--muted);font-weight:400}
+
+/* layout */
+.grid{display:grid;grid-template-columns:minmax(0,2.45fr) minmax(320px,1fr);gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;position:relative;overflow:hidden;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px 0;flex-wrap:wrap}
+.ph h2{font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:var(--muted);font-weight:600}
+.hint{font-size:11.5px;color:var(--dim)}
+.legend{display:flex;gap:14px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.canvas-wrap{position:relative;padding:4px 10px 0}
+#pipe{display:block;width:100%;height:auto;cursor:default}
+.story{display:flex;gap:10px;align-items:flex-start;margin:4px 14px 12px;padding:9px 12px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.story b{color:var(--text);font-weight:600}
+.story .ic{flex:none;width:18px;height:18px;border-radius:50%;background:rgba(77,163,255,.15);color:var(--accent);display:grid;place-items:center;font-size:11px;font-weight:700;margin-top:1px}
+
+/* trace card */
+#trace{position:absolute;z-index:5;width:340px;background:#0f1a27;border:1px solid var(--accent);border-radius:11px;padding:12px 14px;box-shadow:0 12px 40px rgba(0,0,0,.55);font-size:12.5px}
+#trace[hidden]{display:none}
+#trace .step{font-size:10.5px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;font-weight:700}
+#trace h3{font-size:14px;margin:3px 0 6px;font-weight:600}
+#trace p{color:#c3cfdb;margin-bottom:6px}
+#trace code{font-family:"Cascadia Mono",ui-monospace,Consolas,monospace;font-size:11px;color:#9ccfff;background:#0a121c;border:1px solid var(--line);border-radius:5px;padding:5px 7px;display:block;word-break:break-all;margin:4px 0 6px}
+#trace .src{font-size:10.5px;color:var(--dim);font-family:"Cascadia Mono",ui-monospace,Consolas,monospace}
+#trace .row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px}
+#trace .dots{display:flex;gap:4px}#trace .dots i{width:6px;height:6px;border-radius:50%;background:var(--line2)}#trace .dots i.on{background:var(--accent)}
+
+/* metrics */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px}
+.tile{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;min-width:0}
+.tile .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap}
+.tile .v{font-size:21px;font-weight:600;margin-top:2px;white-space:nowrap}
+.tile .v small{font-size:13px;color:var(--muted);font-weight:400}
+.tile .s{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{padding:2px 14px 0;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600;display:flex;justify-content:space-between}
+.sub span{text-transform:none;letter-spacing:0;font-weight:400;color:var(--dim)}
+.chart{display:block;width:100%;padding:0 14px}
+.health{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:8px 14px 6px;gap:2px;background:var(--line)}
+.health div{transition:flex .3s}
+.hl{display:flex;gap:12px;padding:0 14px 14px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.hl b{color:var(--text);font-weight:600}
+
+/* sensors */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:10px;padding:10px 14px 14px;max-height:360px;overflow:auto}
+.card{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:9px;padding:8px 10px;display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:6px;min-height:78px;cursor:pointer;text-align:left}
+.card:hover{border-color:var(--hi)}
+.card.sel{box-shadow:0 0 0 1px var(--accent)}
+.card .id{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .ty{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .val{font-size:16px;font-weight:600;margin-top:4px;white-space:nowrap}
+.card .val small{font-size:11px;color:var(--muted);font-weight:400}
+.card svg{align-self:center}
+.badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.6px;padding:1px 6px;border-radius:4px;text-transform:uppercase;margin-left:6px;vertical-align:2px}
+.h-ok{--c:var(--ok)}.h-warning{--c:var(--warn)}.h-critical{--c:var(--crit)}.h-fault{--c:var(--fault)}.h-stale{--c:var(--stale)}
+.badge{color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
+.card.h-warning,.card.h-critical,.card.h-fault,.card.h-stale{border-left-color:var(--c)}
+
+/* log */
+.tabs{display:flex;gap:4px}
+.tabs button{background:none;border:0;color:var(--dim);font-size:11.5px;padding:2px 8px;border-radius:5px}
+.tabs button.on{color:var(--text);background:#1c2a3b}
+#log{padding:6px 14px 12px;font-size:11.8px;max-height:360px;overflow:auto}
+.ev{display:grid;grid-template-columns:50px 56px minmax(0,1fr);gap:8px;padding:5px 0;border-bottom:1px solid #18222e;align-items:baseline}
+.ev .t{color:var(--dim)}
+.ev .sv{font-size:9.5px;font-weight:700;letter-spacing:.5px;text-align:center;border-radius:4px;padding:1px 0;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
+.ev .m{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .m b{font-weight:600}
+.ev .m span{color:var(--muted)}
+.ev.new{animation:flash 1s ease-out}
+@keyframes flash{from{background:rgba(77,163,255,.12)}to{background:transparent}}
+#console{padding:10px 14px 14px;font-size:11.5px;line-height:1.5;color:#c3cfdb;white-space:pre;overflow:auto;max-height:360px}
+.empty{color:var(--dim);padding:10px 0}
+
+/* inject popover */
+#inject{position:fixed;z-index:10;width:300px;background:#0f1a27;border:1px solid var(--hi);border-radius:12px;padding:12px;box-shadow:0 16px 48px rgba(0,0,0,.6)}
+#inject[hidden]{display:none}
+#inject label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600}
+#inject select{width:100%;margin:6px 0 10px;height:32px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);padding:0 8px}
+#inject .acts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#inject .acts button{text-align:left;padding:7px 9px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);font-size:12px}
+#inject .acts button:hover{border-color:var(--accent)}
+#inject .acts button small{display:block;color:var(--dim);font-size:10.5px}
+#inject p{font-size:11px;color:var(--dim);margin-top:9px}
+
+footer{margin-top:14px;font-size:11.5px;color:var(--dim);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+footer a{color:var(--muted)}
+
+#done{position:absolute;inset:0;display:grid;place-items:center;background:rgba(10,14,20,.55);z-index:4}
+#done[hidden]{display:none}
+#done div{background:#0f1a27;border:1px solid var(--hi);border-radius:12px;padding:16px 18px;text-align:center;max-width:360px}
+#done h3{font-size:15px;margin-bottom:4px}#done p{color:var(--muted);font-size:12.5px;margin-bottom:12px}
+
+@media (max-width:1100px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){
+  body{padding:12px 16px}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .cards{grid-template-columns:minmax(0,1fr)}
+  .card{grid-template-columns:minmax(0,1fr) 120px}
+  .brand h1{font-size:15px}
+  #trace{width:300px}
+  .canvas-wrap{overflow-x:auto}
+  .mk{font-size:0}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 11h3l2-6 3 10 2-7 1.5 3H18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><h1>Real-Time Sensor Telemetry</h1><small>Interactive model of the C++17 pipeline</small></div>
+  </div>
+  <div class="seg" id="scenarios" role="tablist" aria-label="Scenario"></div>
+  <div class="ctrls">
+    <button class="btn" id="play" title="Play / pause (space)" aria-label="Play or pause"></button>
+    <select class="btn" id="speed" title="Playback speed" aria-label="Playback speed">
+      <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+    </select>
+    <button class="btn" id="traceBtn" title="Follow one message through every stage, step by step">Trace a message</button>
+  </div>
+  <div class="timeline">
+    <div class="track" id="track"><div class="bar"></div><div class="fill" id="fill"></div><div id="markers"></div><div class="knob" id="knob"></div></div>
+    <div class="clock mono" id="clock">0.0s</div>
+  </div>
+  <button class="btn primary" id="injectBtn">⚡ Inject fault</button>
+</header>
+
+<main class="grid">
+  <section class="panel" id="pipePanel">
+    <div class="ph"><h2>Live pipeline</h2>
+      <div class="legend"><span><i style="background:var(--accent)"></i>reading</span><span><i style="background:var(--fault)"></i>status=fault</span><span><i style="background:var(--crit)"></i>malformed / dropped</span><span><i style="border:1.5px dashed var(--muted)"></i>lost in transit</span></div></div>
+    <div class="canvas-wrap" id="wrap">
+      <canvas id="pipe" aria-label="Animated diagram of messages flowing from sensors through the server"></canvas>
+      <div id="trace" hidden></div>
+      <div id="done" hidden><div><h3>Scenario complete</h3><p id="doneText"></p><button class="btn primary" id="replay">Replay</button></div></div>
+    </div>
+    <div class="story"><div class="ic">i</div><div id="story"></div></div>
+  </section>
+
+  <section class="panel">
+    <div class="ph"><h2>Server metrics</h2><span class="hint mono" id="cfgHint"></span></div>
+    <div class="tiles">
+      <div class="tile"><div class="k">Received</div><div class="v mono" id="mRecv">0</div><div class="s" id="mRecvR">0 msg/s</div></div>
+      <div class="tile"><div class="k">Processed</div><div class="v mono" id="mProc">0</div><div class="s" id="mProcR">0 msg/s</div></div>
+      <div class="tile"><div class="k">Connections</div><div class="v mono" id="mConn">0</div><div class="s" id="mConnS">accepted 0</div></div>
+      <div class="tile"><div class="k">Invalid</div><div class="v mono" id="mInv">0</div><div class="s" id="mInvS">malformed frames</div></div>
+      <div class="tile"><div class="k">Dropped</div><div class="v mono" id="mDrop">0</div><div class="s">queue full</div></div>
+      <div class="tile"><div class="k">Seq missing</div><div class="v mono" id="mSeq">0</div><div class="s" id="mSeqS">gaps detected</div></div>
+    </div>
+    <div class="sub">Throughput <span>received vs processed, msg/s</span></div>
+    <svg class="chart" id="thr" height="74" aria-label="Throughput chart"></svg>
+    <div class="sub" style="margin-top:8px">Processing latency <span id="latHint">last 2 s</span></div>
+    <svg class="chart" id="lat" height="104" aria-label="Latency histogram"></svg>
+    <div class="sub" style="margin-top:6px">Sensor health</div>
+    <div class="health" id="health"></div>
+    <div class="hl" id="healthL"></div>
+  </section>
+
+  <section class="panel">
+    <div class="ph"><h2>Sensors</h2><span class="hint">click a sensor to inject a fault · dashed lines = warning / critical limits</span></div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section class="panel">
+    <div class="ph"><h2>Server output</h2><div class="tabs"><button class="on" data-tab="log" data-filter="alarms" title="Conditions raised and cleared, connections, faults you inject">Alarms</button><button data-tab="log" data-filter="all" title="Also every sequence gap and malformed frame">All events</button><button data-tab="console" title="The status block the real server prints every second">Status console</button></div></div>
+    <div id="log" class="mono"></div>
+    <pre id="console" class="mono" hidden></pre>
+  </section>
+</main>
+
+<div id="inject" hidden>
+  <label for="injSensor">Sensor</label>
+  <select id="injSensor"></select>
+  <div class="acts">
+    <button data-act="spike">Spike<small>one out-of-limit sample</small></button>
+    <button data-act="ramp">Overheat<small>ramp up for 10 s</small></button>
+    <button data-act="silent">Go silent<small>stop sending 6 s</small></button>
+    <button data-act="disconnect">Disconnect<small>close TCP 6 s</small></button>
+    <button data-act="fault">Report fault<small>status=fault 6 s</small></button>
+    <button data-act="lossy">Lossy link<small>drop · corrupt · delay 10 s</small></button>
+  </div>
+  <p>Faults are applied inside the simulated sensor, exactly as <span class="mono">SensorModel</span> injects them. The server has to detect them on its own.</p>
+</div>
+
+<footer>
+  <span>A browser model of the C++ server. It uses the same sensor models, thresholds and detection rules as the source. Each message's trip is slowed down so you can watch it: the real server takes ≈160 µs.</span>
+  <a href="https://github.com/shivang1141/Real-Time-Sensor-Telemetry-and-Control-Simulator">Source on GitHub →</a>
+</footer>
+
+<script>
+"use strict";
+/* =====================================================================================
+   Configuration. Values are copied from config/server.json and config/*.json.
+   ===================================================================================== */
+const THRESHOLDS = {
+  temperature:     {valid_min:-60,  valid_max:200,   crit_low:-20, warn_low:0,    warn_high:85,   crit_high:105,  hysteresis:1,  max_rate_per_s:20,   max_trend_per_s:2},
+  pressure:        {valid_min:0,    valid_max:500,   crit_low:80,  warn_low:90,   warn_high:115,  crit_high:130,  hysteresis:1,  max_rate_per_s:30,   max_trend_per_s:5},
+  motor_speed:     {valid_min:0,    valid_max:20000, crit_low:200, warn_low:1000, warn_high:6000, crit_high:7500, hysteresis:50, max_rate_per_s:2000, max_trend_per_s:300},
+  signal_strength: {valid_min:-130, valid_max:0,     crit_low:-100,warn_low:-85,  warn_high:-20,  crit_high:-10,  hysteresis:1,  max_rate_per_s:30,   max_trend_per_s:5},
+};
+const UNITS = {temperature:"°C", pressure:"kPa", motor_speed:"rpm", signal_strength:"dBm"};
+const DETECTOR = {stale_after:2.0, trend_window:20, min_trend_samples:10, rate_interval:0.5, stale_check_interval:0.25};
+// Used by the "Inject fault" menu: how big a spike is, and how fast an overheat ramp climbs.
+const INJECT = {
+  temperature:     {spike:100,  ramp:4},
+  pressure:        {spike:40,   ramp:4},
+  motor_speed:     {spike:5000, ramp:600},
+  signal_strength: {spike:55,   ramp:6},
+};
+
+const SCENARIOS = {
+  healthy: {
+    label:"Healthy fleet", file:"config/simulator.json", seed:42, duration:60, loop:true,
+    workers:4, capacity:4096, service:"fast",
+    groups:[
+      {id_prefix:"temp",  type:"temperature",     count:4, rate_hz:10, nominal:25,    noise_stddev:0.3, drift_amplitude:3,   drift_period_s:60},
+      {id_prefix:"press", type:"pressure",        count:3, rate_hz:20, nominal:101.3, noise_stddev:0.4, drift_amplitude:2,   drift_period_s:45},
+      {id_prefix:"motor", type:"motor_speed",     count:3, rate_hz:50, nominal:3000,  noise_stddev:15,  drift_amplitude:200, drift_period_s:30},
+      {id_prefix:"rssi",  type:"signal_strength", count:2, rate_hz:5,  nominal:-60,   noise_stddev:1.5, drift_amplitude:5,   drift_period_s:90},
+    ],
+    markers:[],
+    story:"<b>12 healthy sensors</b> stream readings over TCP. Each one is routed by <span class='mono'>hash(id)</span> to the same shard every time, so its readings stay in order and only one worker ever touches its state. The queues stay almost empty. Try <b>Trace a message</b>, or click a sensor and inject a fault.",
+  },
+  faults: {
+    label:"Fault showcase", file:"config/scenarios/faults.json", seed:7, duration:40,
+    workers:4, capacity:4096, service:"fast",
+    groups:[
+      {id_prefix:"temp-ok",      type:"temperature",     count:2, rate_hz:10, nominal:25,    noise_stddev:0.3},
+      {id_prefix:"temp-spike",   type:"temperature",     count:1, rate_hz:10, nominal:25,    noise_stddev:0.3, faults:{spike_probability:0.02, spike_magnitude:120}},
+      {id_prefix:"temp-ramp",    type:"temperature",     count:1, rate_hz:10, nominal:60,    noise_stddev:0.2, faults:{ramp_after_s:8, ramp_rate_per_s:3.0}},
+      {id_prefix:"press-silent", type:"pressure",        count:1, rate_hz:20, nominal:101.3, noise_stddev:0.3, faults:{fail_after_s:10, fail_duration_s:8, fail_mode:"silent"}},
+      {id_prefix:"motor-drop",   type:"motor_speed",     count:1, rate_hz:50, nominal:3000,  noise_stddev:10,  faults:{fail_after_s:12, fail_duration_s:6, fail_mode:"disconnect"}},
+      {id_prefix:"motor-fault",  type:"motor_speed",     count:1, rate_hz:20, nominal:3000,  noise_stddev:10,  faults:{fail_after_s:15, fail_mode:"fault_status"}},
+      {id_prefix:"rssi-lossy",   type:"signal_strength", count:2, rate_hz:20, nominal:-60,   noise_stddev:1.0, faults:{drop_probability:0.10, malformed_probability:0.05, delay_probability:0.10, delay_min_ms:20, delay_max_ms:200}},
+    ],
+    markers:[
+      {t:8,  label:"ramp",       color:"var(--warn)",  note:"temp-ramp-001 starts overheating at 3 °C/s"},
+      {t:10, label:"silent",     color:"var(--stale)", note:"press-silent-001 stops sending", low:true},
+      {t:12, label:"disconnect", color:"var(--crit)",  note:"motor-drop-001 closes its TCP connection"},
+      {t:15, label:"fault",      color:"var(--fault)", note:"motor-fault-001 reports status=fault", low:true},
+      {t:18, label:"recover",    color:"var(--ok)",    note:"silent and disconnected sensors come back"},
+      {t:23, label:"critical",   color:"var(--crit)",  note:"temp-ramp-001 crosses 105 °C", low:true},
+    ],
+    story:"<b>One sensor for each failure mode.</b> Watch for: occasional <b>spikes</b> (critical alarm, or rejected when out of physical range), a slow <b>overheat</b> (the trend alarm fires before the limit), a <b>silent</b> sensor and a <b>disconnected</b> one (both go stale after 2 s), a sensor reporting <b>status=fault</b>, and a <b>lossy link</b> (lost packets show up as sequence gaps, corrupt frames are rejected at decode).",
+  },
+  overload: {
+    label:"Overload", file:"many_sensors.json + overload_server.json", seed:1, duration:30,
+    workers:1, capacity:256, service:"slow",
+    groups:[
+      {id_prefix:"temp",  type:"temperature", count:8, rate_hz:50, nominal:25,   noise_stddev:0.3},
+      {id_prefix:"motor", type:"motor_speed", count:8, rate_hz:50, nominal:3000, noise_stddev:10},
+    ],
+    markers:[],
+    story:"<b>The server is deliberately under-provisioned:</b> one worker that can handle 400 msg/s, while 800 msg/s arrive. The shard queue fills up, and from then on the newest messages are <b>dropped and counted</b>. The network threads never block, memory stays bounded, and queueing pushes latency into the hundreds of milliseconds. (Scaled 1:12.5 from the real 10k msg/s benchmark so every message can be drawn.)",
+  },
+};
+
+/* =====================================================================================
+   Deterministic RNG (one stream per sensor, like the C++ per-sensor seeds).
+   ===================================================================================== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function mixSeed(seed, i){let h=(seed*2654435761 ^ (i+1)*0x9E3779B1)>>>0;h=Math.imul(h^h>>>16,0x85ebca6b);h=Math.imul(h^h>>>13,0xc2b2ae35);return (h^h>>>16)>>>0}
+function fnv1a(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)}return h>>>0}
+
+/* =====================================================================================
+   SensorModel: port of src/sim/sensor_model.cpp
+   ===================================================================================== */
+class SensorModel {
+  constructor(spec, seed){
+    this.spec = spec;
+    this.rng = mulberry32(seed);
+    this.sequence = 0;
+    this.spare = null;
+    const f = spec.faults || {};
+    this.ramps = f.ramp_after_s != null ? [{from:f.ramp_after_s, to:Infinity, rate:f.ramp_rate_per_s}] : [];
+    this.windows = f.fail_after_s != null ? [{from:f.fail_after_s, to:f.fail_duration_s>0 ? f.fail_after_s+f.fail_duration_s : Infinity, mode:f.fail_mode||"silent"}] : [];
+    this.lossy = [];          // injected lossy-link windows
+    this.pendingSpike = 0;    // injected one-off spike
+  }
+  unit(){ return this.rng(); }
+  normal(){
+    if (this.spare !== null){ const s=this.spare; this.spare=null; return s; }
+    let u=0,v=0; while(u===0)u=this.unit(); v=this.unit();
+    const r=Math.sqrt(-2*Math.log(u)); this.spare=r*Math.sin(2*Math.PI*v); return r*Math.cos(2*Math.PI*v);
+  }
+  chance(p){ return p>0 && this.unit()<p; }
+  baseline(t){
+    const s=this.spec; let v=s.nominal;
+    if (s.drift_amplitude && s.drift_period_s>0) v += s.drift_amplitude*Math.sin(2*Math.PI*t/s.drift_period_s);
+    for (const r of this.ramps) if (t>r.from && t<r.to) v += r.rate*(t-r.from);
+    return v;
+  }
+  failMode(t){ for (const w of this.windows) if (t>=w.from && t<w.to) return w.mode; return null; }
+  faultsAt(t){
+    const f = Object.assign({drop_probability:0, malformed_probability:0, delay_probability:0, delay_min_ms:0, delay_max_ms:0, spike_probability:0, spike_magnitude:0}, this.spec.faults||{});
+    if (this.lossy.some(w=>t>=w.from && t<w.to)){
+      f.drop_probability=Math.max(f.drop_probability,0.10); f.malformed_probability=Math.max(f.malformed_probability,0.05);
+      f.delay_probability=Math.max(f.delay_probability,0.10); f.delay_min_ms=20; f.delay_max_ms=Math.max(f.delay_max_ms,200);
+    }
+    return f;
+  }
+  // SensorModel::next(): value = baseline + noise (+ spike); status; action; delay.
+  next(t){
+    const f=this.faultsAt(t), spec=this.spec;
+    const step={seq:this.sequence++, value:this.baseline(t), status:"ok", action:"send", delay:0, spiked:false};
+    if (spec.noise_stddev>0) step.value += spec.noise_stddev*this.normal();
+    if (this.chance(f.spike_probability)){ step.value += (this.unit()<0.5?-1:1)*f.spike_magnitude; step.spiked=true; }
+    if (this.pendingSpike){ step.value += this.pendingSpike; this.pendingSpike=0; step.spiked=true; }
+    if (this.failMode(t)==="fault_status") step.status="fault";
+    if (this.chance(f.drop_probability)) step.action="drop";
+    else if (this.chance(f.malformed_probability)) step.action="malformed";
+    if (this.chance(f.delay_probability)) step.delay=(f.delay_min_ms+Math.floor(this.unit()*(f.delay_max_ms-f.delay_min_ms+1)))/1000;
+    return step;
+  }
+}
+
+/* =====================================================================================
+   AnomalyDetector + SensorRegistry: port of src/processing/
+   ===================================================================================== */
+const CONDITIONS = ["warn_low","warn_high","crit_low","crit_high","rate_of_change","trend","sensor_degraded","sensor_fault","stale"];
+const CRITICAL = new Set(["crit_low","crit_high","sensor_fault","stale"]);
+
+function trendSlope(w){
+  const n=w.length; if(n<2) return null;
+  let mt=0,mv=0; for(const s of w){mt+=s.t;mv+=s.v} mt/=n; mv/=n;
+  let sxx=0,sxy=0; for(const s of w){const dt=s.t-mt; sxx+=dt*dt; sxy+=dt*(s.v-mv)}
+  return sxx>0 ? sxy/sxx : null;
+}
+function validate(msg, prev){
+  const L=THRESHOLDS[msg.type];
+  if (prev && prev.type!==msg.type) return "type_mismatch";
+  if (msg.value<L.valid_min || msg.value>L.valid_max) return "out_of_physical_range";
+  if (prev){
+    if (msg.seq<=prev.seq) return "sequence_regressed";
+    if (msg.ts<prev.ts) return "timestamp_regressed";
+  }
+  return null;
+}
+function evaluate(msg, history, active){
+  const L=THRESHOLDS[msg.type], v=msg.value, h=L.hysteresis, out=new Set();
+  const check=(c,beyond,beyondClear)=>{ if(active.has(c)?beyondClear:beyond) out.add(c) };
+  check("warn_high", v>L.warn_high, v>L.warn_high-h);
+  check("crit_high", v>L.crit_high, v>L.crit_high-h);
+  check("warn_low",  v<L.warn_low,  v<L.warn_low+h);
+  check("crit_low",  v<L.crit_low,  v<L.crit_low+h);
+  let rate=null, slope=null;
+  if (L.max_rate_per_s>0 && history.length>=2){
+    const cur=history[history.length-1], target=cur.t-DETECTOR.rate_interval;
+    let ref=history[0];
+    for (let i=history.length-2;i>=0;i--) if (history[i].t<=target){ ref=history[i]; break; }
+    const dt=cur.t-ref.t;
+    if (dt>0){ rate=Math.abs(cur.v-ref.v)/dt; if (rate>L.max_rate_per_s) out.add("rate_of_change"); }
+  }
+  if (L.max_trend_per_s>0 && history.length>=DETECTOR.min_trend_samples){
+    slope=trendSlope(history);
+    if (slope!==null && Math.abs(slope)>L.max_trend_per_s) out.add("trend");
+  }
+  if (msg.status==="degraded") out.add("sensor_degraded");
+  else if (msg.status==="fault") out.add("sensor_fault");
+  return {set:out, rate, slope};
+}
+function healthOf(active){
+  if (active.has("stale")) return "stale";
+  if (active.has("sensor_fault")) return "fault";
+  if (active.has("crit_high")||active.has("crit_low")) return "critical";
+  return active.size ? "warning" : "ok";
+}
+
+/* =====================================================================================
+   Simulation: sensor threads, TCP, connection threads, router, shard queues, workers.
+   Time is simulated in fixed 2 ms steps, so a run is fully reproducible from its seed.
+   ===================================================================================== */
+const DT = 0.002;
+// How long each hop takes on screen (simulated seconds). Real hops take microseconds.
+const HOP = {wire:0.30, conn:0.14, link:0.08, gate:0.16, route:0.28, toQueue:0.22, work:0.16, lost:0.45, reject:0.5, drop:0.45, spark:0.35};
+const WALL0 = 1729500000000000;
+// Time from send to the worker on screen; sparklines are drawn against this delayed clock.
+const LAG = HOP.wire+HOP.conn+HOP.link+HOP.gate+HOP.route+HOP.toQueue;  // fixed epoch for the "ts" field in traced frames
+
+class Sim {
+  constructor(key, injections){
+    const scn = SCENARIOS[key];
+    this.key=key; this.scn=scn; this.t=0;
+    this.injections=(injections||[]).slice().sort((a,b)=>a.t-b.t); this.injIdx=0;
+    this.sensors=[];
+    for (const g of scn.groups) for (let i=1;i<=g.count;i++){
+      const spec=Object.assign({}, g, {id:`${g.id_prefix}-${String(i).padStart(3,"0")}`});
+      const idx=this.sensors.length;
+      this.sensors.push({spec, idx, id:spec.id, type:spec.type,
+        model:new SensorModel(spec, mixSeed(scn.seed, idx)),
+        period:1/spec.rate_hz, nextTick:(idx*0.0071)%(1/spec.rate_hz),
+        connected:false, conn:0, nextConnect:0, lastFrameAt:-1, shard:0,
+        jitter:mulberry32(mixSeed(scn.seed+101, idx))});
+    }
+    this.workers=scn.workers;
+    this.shards=[]; for(let k=0;k<this.workers;k++) this.shards.push({k, queue:[], batch:[], batchAt:0, busyUntil:0, peak:0, lastWork:-1, sensors:[]});
+    for (const s of this.sensors){ s.shard=fnv1a(s.id)%this.workers; this.shards[s.shard].sensors.push(s.idx); }
+    this.registry=new Map();
+    this.msgs=[]; this.pending=[]; this.events=[]; this.eventSeq=0;
+    this.m={frames:0, invalid:0, rejected:0, dropped:0, seqMissing:0, processed:0, enqueued:0, accepted:0, closed:0, raised:0, cleared:0, lostSim:0};
+    this.lat=[]; this.thr=[]; this.nextThr=0; this.nextStale=DETECTOR.stale_check_interval; this.nextStatus=1;
+    this.series=new Map(this.sensors.map(s=>[s.id,[]]));
+    this.status=""; this.prevStatus={t:0, frames:0, processed:0}; this.statusLat=[];
+    this.trace=null; this.halt=false; this.lastEventsAt=-1; this.svcRng=mulberry32(scn.seed*7919+1);
+  }
+
+  // ---- events, as LoggingEventSink would log them ----
+  emit(e){
+    e.t=this.t; e.n=++this.eventSeq; this.events.push(e);
+    // Keep every alarm; per-message noise (gaps, malformed frames) is trimmed to the newest 300.
+    if (this.events.length>900){ let keep=300; for (let i=this.events.length-1;i>=0;i--) if (isNoise(this.events[i]) && keep-->0) this.events[i].keep=true;
+      this.events=this.events.filter(x=>!isNoise(x)||x.keep); this.events.forEach(x=>delete x.keep); }
+  }
+
+  advanceTo(target){
+    this.halt=false;
+    while (this.t+DT<=target+1e-9 && !this.halt) this.step();
+  }
+
+  step(){
+    const t1=this.t+DT;
+    while (this.injIdx<this.injections.length && this.injections[this.injIdx].t<=t1) this.applyInjection(this.injections[this.injIdx++]);
+    // Delayed sends first: the C++ sensor thread sleeps through the delay, so a delayed
+    // frame always leaves before that sensor's next reading.
+    for (let i=0;i<this.pending.length;){ const p=this.pending[i]; if (p.at<=t1){ this.pending.splice(i,1); this.send(p.sensor,p.step,p.at); } else i++; }
+    for (const s of this.sensors) while (s.nextTick<=t1) this.sensorTick(s);
+    this.t=t1;
+    for (let i=0;i<this.msgs.length;i++){ const m=this.msgs[i]; while (!m.dead && m.stage!=="queued" && m.stage!=="batched" && m.s1<=t1) this.nextStage(m); }
+    for (const sh of this.shards){ this.runWorker(sh, t1); const d=this.depth(sh); if (d>sh.peak) sh.peak=d; }
+    if (this.msgs.some(m=>m.dead)) this.msgs=this.msgs.filter(m=>!m.dead);
+    if (t1>=this.nextStale){ this.checkStale(t1); this.nextStale+=DETECTOR.stale_check_interval; }
+    if (t1>=this.nextThr){ this.thr.push({t:t1, frames:this.m.frames, processed:this.m.processed, dropped:this.m.dropped}); if(this.thr.length>200) this.thr.shift(); this.nextThr+=0.5; }
+    if (t1>=this.nextStatus){ this.status=this.formatStatus(); this.nextStatus+=1; }
+    const cut=t1-2; while(this.lat.length && this.lat[0].t<cut) this.lat.shift();
+  }
+
+  // ---- sensor thread: Simulator::run_sensor ----
+  sensorTick(s){
+    // Deadlines are absolute (next_tick += period); the thread wakes up a little late.
+    const now=s.nextTick+s.jitter()*0.0015;
+    s.nextTick+=s.period;
+    if (s.nextTick<now) s.nextTick=now;
+    const mode=s.model.failMode(now);
+    if (mode==="silent") return;
+    if (mode==="disconnect"){
+      if (s.connected){ s.connected=false; this.m.closed++; this.emit({kind:"net", id:s.id, text:`connection closed by peer (conn #${s.conn})`}); }
+      s.nextConnect=now; return;
+    }
+    const step=s.model.next(now);
+    if (step.action==="drop"){ this.spawnLost(s, now, step); return; }
+    if (step.delay>0){
+      // The C++ sensor thread sleeps for the delay, so its next tick slips too.
+      this.pending.push({sensor:s, step, at:now+step.delay});
+      if (s.nextTick<now+step.delay) s.nextTick=now+step.delay;
+      return;
+    }
+    this.send(s, step, now);
+  }
+  send(s, step, now){
+    if (!s.connected){
+      if (now<s.nextConnect){ this.spawnLost(s, now, step); return; }
+      s.connected=true; s.conn=++this.m.accepted;
+      if (now>0.5) this.emit({kind:"net", id:s.id, text:`connection accepted (conn #${s.conn}), resumes at seq ${step.seq}`});
+    }
+    const msg={id:s.id, sensor:s, type:s.type, seq:step.seq, value:step.value, status:step.status, ts:now - step.delay,
+      malformed:step.action==="malformed", spiked:step.spiked, delayed:step.delay, sentAt:now};
+    this.addMsg(msg, "wire", now);
+    if (this.trace && this.trace.want===s.id && !this.trace.msg){ this.trace.msg=msg; msg.traced=true; this.traceHook(msg,"sent"); }
+  }
+  spawnLost(s, now, step){
+    this.m.lostSim++;
+    const msg={id:s.id, sensor:s, type:s.type, seq:step.seq, value:step.value, status:step.status, lost:true};
+    this.addMsg(msg, "lost", now);
+    if (this.trace && this.trace.want===s.id && !this.trace.msg){ this.trace.msg=msg; msg.traced=true; this.traceHook(msg,"lost"); }
+  }
+  addMsg(m, stage, now){ m.stage=stage; m.s0=now; m.s1=now+HOP[stage]; this.msgs.push(m); }
+  go(m, stage, at){ m.stage=stage; m.s0=at; m.s1=at+(HOP[stage]||0); }
+
+  // ---- connection thread -> decode -> router ----
+  nextStage(m){
+    const at=m.s1;
+    switch (m.stage){
+      case "wire":
+        m.sensor.lastFrameAt=at; this.go(m,"conn",at);
+        if (m.traced) this.traceHook(m,"conn"); return;
+      case "conn": this.go(m,"link",at); return;
+      case "link":
+        this.m.frames++; this.go(m,"gate",at);
+        if (m.traced) this.traceHook(m,"gate"); return;
+      case "gate":
+        if (m.malformed){
+          this.m.invalid++; this.go(m,"reject",at);
+          if (this.m.invalid<=3 || this.m.invalid%5===0) this.emit({kind:"invalid", id:m.id, text:"malformed frame: decode failed, never queued", count:this.m.invalid});
+          if (m.traced) this.traceHook(m,"rejected");
+          return;
+        }
+        this.go(m,"route",at); return;
+      case "route": {
+        // ProcessingEngine::submit: shard = hash(id) % workers; try_push never blocks.
+        const sh=this.shards[m.sensor.shard];
+        if (sh.queue.length>=this.scn.capacity){
+          this.m.dropped++; this.go(m,"drop",at);
+          if (m.traced) this.traceHook(m,"dropped");
+          return;
+        }
+        this.m.enqueued++; sh.queue.push(m);
+        m.enqAt=at; this.go(m,"toQueue",at);
+        if (m.traced) this.traceHook(m,"routed"); return;
+      }
+      case "toQueue": m.stage="queued"; m.s0=at; return;
+      case "work":
+        m.dead=true;
+        if (m.events && m.events.length){ const sp={spark:true, sensor:m.sensor, sev:m.sparkSev}; this.addMsg(sp,"spark",at); }
+        if (m.traced) this.traceHook(m,"done");
+        return;
+      default: m.dead=true;
+    }
+  }
+
+  // ---- worker thread: pop_batch(64) -> SensorRegistry::update ----
+  runWorker(sh, t1){
+    for (;;){
+      if (!sh.batch.length){
+        // pop_batch() moves up to 64 items out of the queue under one lock, freeing their slots.
+        if (!sh.queue.length) return;
+        const popAt=Math.max(sh.busyUntil, sh.queue[0].enqAt+HOP.toQueue);
+        if (popAt>t1) return;
+        while (sh.batch.length<64 && sh.queue.length && sh.queue[0].enqAt+HOP.toQueue<=popAt){ const m=sh.queue.shift(); m.stage="batched"; sh.batch.push(m); }
+        sh.batchAt=popAt;
+      }
+      const m=sh.batch[0], start=Math.max(sh.busyUntil, sh.batchAt);
+      if (start>t1) return;
+      sh.batch.shift();
+      const ready=m.enqAt+HOP.toQueue;
+      const serviceUs = this.scn.service==="slow" ? 2500 : this.serviceTimeUs();
+      sh.busyUntil = start + (this.scn.service==="slow" ? 0.0025 : 0);
+      const waitUs = Math.max(0,(start-ready))*1e6;
+      m.latencyUs = waitUs + serviceUs; m.waitUs=waitUs;
+      this.process(m, start);
+      sh.lastWork=start;
+      this.lat.push({t:start, us:m.latencyUs});
+      this.go(m,"work",start);
+      if (m.traced) this.traceHook(m,"processed");
+    }
+  }
+  // Modelled server-side processing time: log-normal, median ≈140 µs, p99 ≈300 µs,
+  // matching the status block measured on the real server.
+  serviceTimeUs(){
+    let u=0; while(u===0) u=this.svcRng();
+    const z=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*this.svcRng());
+    return 60+Math.exp(4.4+0.45*z);
+  }
+
+  process(m, now){
+    let st=this.registry.get(m.id);
+    if (!st){ st={type:m.type, last:null, lastAccepted:now, window:[], active:new Set(), accepted:0, rejected:0, missing:0, lastValue:m.value}; this.registry.set(m.id, st); }
+    const events=[]; m.events=events;
+    const reason=validate(m, st.last);
+    if (reason){
+      st.rejected++; this.m.rejected++; this.m.processed++;  // messages_processed counts rejected items too
+      events.push({kind:"reject", id:m.id, reason, value:m.value});
+      m.detail={reason}; this.flush(events, m); return;
+    }
+    let missing=0;
+    if (st.last && m.seq>st.last.seq+1){
+      missing=m.seq-st.last.seq-1; st.missing+=missing; this.m.seqMissing+=missing;
+      events.push({kind:"gap", id:m.id, count:missing, value:m.value});
+    }
+    st.window.push({t:m.ts, v:m.value}); while (st.window.length>DETECTOR.trend_window) st.window.shift();
+    const before=st.active;
+    const activeNoStale=new Set([...before].filter(c=>c!=="stale"));
+    const ev=evaluate(m, st.window, activeNoStale);
+    for (const c of CONDITIONS){
+      const was=before.has(c), is=ev.set.has(c);
+      if (was!==is){ events.push({kind:is?"raised":"cleared", id:m.id, cond:c, value:m.value, rate:ev.rate, slope:ev.slope}); is?this.m.raised++:this.m.cleared++; }
+    }
+    st.active=ev.set; st.last={seq:m.seq, ts:m.ts, type:m.type}; st.lastAccepted=now; st.accepted++; st.lastValue=m.value;
+    this.m.processed++;
+    m.detail={missing, rate:ev.rate, slope:ev.slope, active:[...ev.set], window:st.window.length};
+    const ser=this.series.get(m.id); ser.push({t:m.ts, v:m.value, s:healthOf(ev.set)}); if (ser.length>2000) ser.splice(0,ser.length-2000);
+    const cutoff=m.ts-24; while (ser.length && ser[0].t<cutoff) ser.shift();
+    this.flush(events, m);
+  }
+  flush(events, m){
+    if (!events.length) return;
+    let sev="info";
+    for (const e of events){ this.emit(e); const s=sevOf(e); if (SEV_RANK[s]>SEV_RANK[sev]) sev=s; }
+    m.sparkSev=sev; this.lastEventsAt=this.t;
+  }
+  checkStale(now){
+    for (const [id, st] of this.registry){
+      if (!st.active.has("stale") && now-st.lastAccepted>DETECTOR.stale_after){
+        st.active=new Set(st.active); st.active.add("stale"); this.m.raised++;
+        this.emit({kind:"raised", id, cond:"stale", value:st.lastValue, age:now-st.lastAccepted});
+        const s=this.sensors.find(x=>x.id===id); this.addMsg({spark:true, sensor:s, sev:"stale", fromStale:true},"spark",now);
+      }
+    }
+  }
+
+  // ---- user fault injection (recorded so seeking can replay it) ----
+  applyInjection(inj){
+    const s=this.sensors.find(x=>x.id===inj.id); if(!s) return;
+    const t=inj.t, md=s.model, k=INJECT[s.type];
+    if (inj.act==="spike") md.pendingSpike=k.spike;
+    if (inj.act==="ramp") md.ramps.push({from:t, to:t+10, rate:k.ramp});
+    if (inj.act==="silent") md.windows.push({from:t, to:t+6, mode:"silent"});
+    if (inj.act==="disconnect") md.windows.push({from:t, to:t+6, mode:"disconnect"});
+    if (inj.act==="fault") md.windows.push({from:t, to:t+6, mode:"fault_status"});
+    if (inj.act==="lossy") md.lossy.push({from:t, to:t+10});
+    this.emit({kind:"user", id:s.id, text:INJECT_TEXT[inj.act]});
+  }
+
+  // ---- snapshots used by the UI ----
+  depth(sh){ let d=0; for (const m of sh.queue) if (m.stage==="queued") d++; return d; }
+  health(id){ const st=this.registry.get(id); return st?healthOf(st.active):"ok"; }
+  summary(){
+    const h={ok:0,warning:0,critical:0,fault:0,stale:0,activeWarn:0,activeCrit:0,total:0};
+    for (const s of this.sensors){
+      const st=this.registry.get(s.id); h.total++;
+      if (!st){ h.ok++; continue; }
+      h[healthOf(st.active)]++;
+      for (const c of st.active) CRITICAL.has(c)?h.activeCrit++:h.activeWarn++;
+    }
+    return h;
+  }
+  rates(){
+    const a=this.thr[this.thr.length-1], b=this.thr[Math.max(0,this.thr.length-3)];
+    if (!a||!b||a.t===b.t) return {frames:0, processed:0, dropped:0};
+    const d=a.t-b.t; return {frames:(a.frames-b.frames)/d, processed:(a.processed-b.processed)/d, dropped:(a.dropped-b.dropped)/d};
+  }
+  latStats(list){
+    const xs=list.map(x=>x.us).sort((a,b)=>a-b), n=xs.length;
+    if(!n) return {n:0, mean:0, p50:0, p95:0, p99:0, max:0};
+    const p=q=>xs[Math.min(n-1,Math.floor(q*n))];
+    return {n, mean:xs.reduce((a,b)=>a+b,0)/n, p50:p(.5), p95:p(.95), p99:p(.99), max:xs[n-1]};
+  }
+  // Same layout as format_status() in src/app/status_reporter.cpp.
+  formatStatus(){
+    const m=this.m, now=this.t, dt=now-this.prevStatus.t||1;
+    const fr=(m.frames-this.prevStatus.frames)/dt, pr=(m.processed-this.prevStatus.processed)/dt;
+    const L=this.latStats(this.lat.filter(x=>x.t>now-1));
+    this.prevStatus={t:now, frames:m.frames, processed:m.processed};
+    const h=this.summary(); const active=this.sensors.filter(s=>s.connected).length;
+    const depth=this.shards.reduce((a,s)=>a+this.depth(s),0), peak=Math.max(...this.shards.map(s=>s.peak));
+    let out=`---- status t=${now.toFixed(1)}s ----\n`;
+    out+=`  connections   active=${active} accepted=${m.accepted} rejected=0\n`;
+    out+=`  messages      recv=${m.frames} (${fr.toFixed(0)}/s) processed=${m.processed} (${pr.toFixed(0)}/s)\n`;
+    out+=`  errors        invalid=${m.invalid} oversized=0 rejected=${m.rejected} dropped=${m.dropped} seq_missing=${m.seqMissing}\n`;
+    out+=`  queue         depth=${depth}/${this.scn.capacity*this.workers} peak_shard=${peak} workers=${this.workers}\n`;
+    out+=`  latency(us)   interval n=${L.n} mean=${L.mean.toFixed(1)} p50=${Math.round(L.p50)} p95=${Math.round(L.p95)} p99=${Math.round(L.p99)} max=${Math.round(L.max)}\n`;
+    out+=`  sensors       total=${h.total} ok=${h.ok} warning=${h.warning} critical=${h.critical} fault=${h.fault} stale=${h.stale} | active warnings=${h.activeWarn} critical=${h.activeCrit}\n`;
+    const listed=[...this.sensors].sort((a,b)=>a.id<b.id?-1:1).filter(s=>this.health(s.id)!=="ok").slice(0,10);
+    for (const s of listed){
+      const st=this.registry.get(s.id); const conds=CONDITIONS.filter(c=>st.active.has(c)).join(",")||"-";
+      out+=`    ${s.id.padEnd(20)} ${s.type.padEnd(16)} ${healthOf(st.active).padEnd(9)} value=${st.lastValue.toFixed(3).padEnd(10)} age=${Math.round((now-st.lastAccepted)*1000)}ms [${conds}]\n`;
+    }
+    return out;
+  }
+  traceHook(m, stage){ if (this.onTrace) this.onTrace(m, stage); }
+}
+const isNoise=e=>e.kind==="gap"||e.kind==="invalid";
+const SEV_RANK={info:0, user:0, clear:1, warn:2, stale:3, fault:4, crit:5};
+const INJECT_TEXT={spike:"injected a spike", ramp:"injected an overheat ramp (10 s)", silent:"went silent (6 s)", disconnect:"injected a disconnect (6 s)", fault:"reports status=fault (6 s)", lossy:"link became lossy (10 s)"};
+function sevOf(e){
+  if (e.kind==="raised") return e.cond==="stale"?"stale":e.cond==="sensor_fault"?"fault":CRITICAL.has(e.cond)?"crit":"warn";
+  if (e.kind==="cleared") return "clear";
+  if (e.kind==="gap"||e.kind==="reject") return "warn";
+  if (e.kind==="invalid") return "crit";
+  if (e.kind==="user") return "user";
+  return "info";
+}
+
+/* =====================================================================================
+   Rendering
+   ===================================================================================== */
+const COL={accent:"#4da3ff",ok:"#3fb950",warning:"#e3b341",warn:"#e3b341",critical:"#f85149",crit:"#f85149",fault:"#b48cff",stale:"#7d8796",
+  line:"#1e2a38",line2:"#2a3a4d",hi:"#2d4560",text:"#e6edf3",muted:"#8193a8",dim:"#56677b",panel2:"#0d131b",gate:"#0f1a27",clear:"#3fb950",info:"#8193a8",user:"#4da3ff"};
+const MONO='"Cascadia Mono", ui-monospace, Consolas, Menlo, monospace';
+const SANS='"Segoe UI", system-ui, -apple-system, sans-serif';
+const $=id=>document.getElementById(id);
+
+let sim, L, selected=null, playing=true, speed=1, injections=[], lastFrame=0, tracing=null;
+
+function layout(n, workers){
+  const W=1080, H=Math.max(470, 64+n*31+40);
+  const top=62, bottom=H-40, rowH=(bottom-top)/n, nodeH=Math.min(34, rowH-5);
+  const rowY=i=>top+rowH*i+rowH/2;
+  const shardY=[]; const qTop=top+50, qBot=bottom-60;
+  for (let k=0;k<workers;k++) shardY.push(workers===1?(top+bottom)/2-20:qTop+(qBot-qTop)*k/(workers-1));
+  return {W,H,n,rowH,nodeH,rowY,top,bottom,
+    sx1:14,sx2:184, cx1:232,cx2:338, gx1:384,gx2:468, rx:540, ry:(top+bottom)/2-20,
+    qx1:600,qx2:770, wx1:806,wx2:900, ox1:950,ox2:1068, shardY,
+    rejectY:bottom-74, dropX:540, dropY:bottom-30,
+    outs:[{y:top+70,t:"events",s:"structured log"},{y:(top+bottom)/2-10,t:"metrics",s:"atomics + histograms"},{y:bottom-80,t:"status",s:"1 Hz report"}]};
+}
+
+function setupCanvas(){
+  // On phones the diagram keeps a readable width and scrolls sideways inside its panel.
+  const c=$("pipe"), w=Math.max(c.parentElement.clientWidth-20, window.innerWidth<640?760:0);
+  const dpr=window.devicePixelRatio||1;
+  c.width=Math.round(w*dpr); c.height=Math.round(w*L.H/L.W*dpr);
+  c.style.width=w+"px"; c.style.height=(w*L.H/L.W)+"px";
+  c._scale=w/L.W*dpr; c._css=w/L.W;
+}
+
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+function txt(ctx,s,x,y,o){ctx.font=`${o.w||400} ${o.size||11}px ${o.mono?MONO:SANS}`;ctx.fillStyle=o.c||COL.text;ctx.textAlign=o.align||"left";ctx.fillText(s,x,y)}
+function bez(p0,p1,p2,p3,t){const u=1-t;return u*u*u*p0+3*u*u*t*p1+3*u*t*t*p2+t*t*t*p3}
+const ease=p=>p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+
+function drawPipeline(){
+  const c=$("pipe"), ctx=c.getContext("2d"), now=sim.t;
+  ctx.setTransform(c._scale,0,0,c._scale,0,0);
+  ctx.clearRect(0,0,L.W,L.H);
+  const tr=tracing&&tracing.msg;
+
+  // stage headers
+  const stages=[[L.sx1+4,"sensor_sim",`${L.n} sensor threads`],[L.cx1,"connection threads","poll · recv"],[L.gx1,"LineFramer","frame · decode"],[L.rx-28,"router",`hash(id) % ${sim.workers}`],[L.qx1,"shard queues",`BoundedQueue × ${sim.workers}`],[L.wx1,"workers","detect · track"],[L.ox1,"output",""]];
+  for (const [x,a,b] of stages){ txt(ctx,a,x,18,{w:600,size:11.5}); txt(ctx,b,x,32,{c:COL.dim,size:10.5}); }
+  ctx.setLineDash([4,4]); ctx.strokeStyle=COL.line2; ctx.lineWidth=1;
+  rr(ctx,6,42,L.sx2-L.sx1+16,L.H-58,10); ctx.stroke();
+  rr(ctx,L.cx1-12,42,L.W-L.cx1+6,L.H-58,10); ctx.stroke(); ctx.setLineDash([]);
+  txt(ctx,"process: sensor_sim",12,L.H-4,{c:COL.dim,size:10,mono:true});
+  txt(ctx,"process: telemetry_server  ·  TCP :9000  ·  one JSON object per line (NDJSON)",L.cx1-6,L.H-4,{c:COL.dim,size:10,mono:true});
+
+  // wires
+  ctx.lineWidth=1.4;
+  sim.sensors.forEach((s,i)=>{const y=L.rowY(i);
+    ctx.strokeStyle=s.connected?COL.line2:"#3a2226"; ctx.setLineDash(s.connected?[]:[3,4]);
+    ctx.beginPath();ctx.moveTo(L.sx2,y);ctx.lineTo(L.cx1,y);ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle=COL.line2; ctx.beginPath();ctx.moveTo(L.cx2,y);ctx.lineTo(L.gx1,y);ctx.stroke();
+  });
+  const gy0=L.top-6, gy1=L.bottom+2;
+  for (let k=0;k<5;k++){ const y=gy0+60+k*(gy1-gy0-120)/4; ctx.beginPath();ctx.moveTo(L.gx2,y);ctx.bezierCurveTo(L.gx2+36,y,L.rx-40,L.ry,L.rx-16,L.ry);ctx.stroke(); }
+  L.shardY.forEach(y=>{ctx.beginPath();ctx.moveTo(L.rx+16,L.ry);ctx.bezierCurveTo(L.rx+40,L.ry,L.qx1-30,y,L.qx1,y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(L.qx2,y);ctx.lineTo(L.wx1,y);ctx.stroke();
+    ctx.strokeStyle=COL.line; for(const o of L.outs.slice(0,2)){const oy=o.y+20;ctx.beginPath();ctx.moveTo(L.wx2,y);ctx.bezierCurveTo(L.wx2+24,y,L.ox1-24,oy,L.ox1,oy);ctx.stroke()} ctx.strokeStyle=COL.line2;});
+  ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo((L.ox1+L.ox2)/2,L.outs[1].y+40);ctx.lineTo((L.ox1+L.ox2)/2,L.outs[2].y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(L.rx,L.ry+26);ctx.lineTo(L.rx,L.dropY-14);ctx.strokeStyle="rgba(248,81,73,.35)";ctx.stroke();ctx.setLineDash([]);
+
+  // sensor nodes
+  const small=L.nodeH<28;
+  sim.sensors.forEach((s,i)=>{const y=L.rowY(i)-L.nodeH/2, h=sim.health(s.id), col=COL[h], sel=selected===s.id;
+    const mode=s.model.failMode(now);
+    rr(ctx,L.sx1,y,L.sx2-L.sx1,L.nodeH,7); ctx.fillStyle=sel?"#132235":COL.panel2; ctx.fill();
+    ctx.strokeStyle=sel?COL.accent:h==="ok"?COL.line2:col; ctx.globalAlpha=sel||h!=="ok"?1:1; ctx.lineWidth=sel?1.6:1.1; ctx.stroke(); ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.arc(L.sx1+14,y+L.nodeH/2,4.5,0,7);ctx.fillStyle=col;ctx.fill();
+    if (h!=="ok"){ctx.beginPath();ctx.arc(L.sx1+14,y+L.nodeH/2,8,0,7);ctx.fillStyle=col+"33";ctx.fill();}
+    const sub = mode==="silent"?"silent":mode==="disconnect"?"disconnected":mode==="fault_status"?"status=fault":"";
+    if (small){ txt(ctx,s.id,L.sx1+26,y+L.nodeH/2+4,{w:600,size:10.5,mono:true}); }
+    else { txt(ctx,s.id,L.sx1+26,y+14,{w:600,size:11.5,mono:true}); txt(ctx,s.type+(sub?" · "+sub:""),L.sx1+26,y+27,{c:sub?col===COL.ok?COL.muted:col:COL.dim,size:10}); }
+  });
+  // connection threads
+  sim.sensors.forEach((s,i)=>{const y=L.rowY(i)-L.nodeH/2, recent=now-s.lastFrameAt<0.08;
+    rr(ctx,L.cx1,y,L.cx2-L.cx1,L.nodeH,7);
+    if (s.connected){ ctx.fillStyle=recent?"#13263a":COL.panel2; ctx.fill(); ctx.strokeStyle=recent?COL.hi:COL.line2; ctx.stroke();
+      if (small) txt(ctx,`conn #${s.conn}`,L.cx1+10,y+L.nodeH/2+4,{size:10.5,mono:true});
+      else { txt(ctx,`conn #${s.conn}`,L.cx1+10,y+14,{size:11,mono:true}); txt(ctx,"16 KiB recv buf",L.cx1+10,y+27,{c:COL.dim,size:9.5}); }
+      // LineFramer buffer: fills briefly as bytes arrive
+      const bx=L.cx2-30, by=y+L.nodeH/2-6; rr(ctx,bx,by,22,12,2); ctx.strokeStyle=COL.line2; ctx.stroke();
+      if (recent){ rr(ctx,bx+1,by+1,20*(1-(now-s.lastFrameAt)/0.08),10,1); ctx.fillStyle="rgba(77,163,255,.55)"; ctx.fill(); }
+    } else {
+      ctx.setLineDash([4,3]); ctx.strokeStyle=COL.crit; ctx.stroke(); ctx.setLineDash([]);
+      txt(ctx,s.conn?"conn closed":"connecting…",L.cx1+10,small?y+L.nodeH/2+4:y+14,{size:10.5,mono:true,c:COL.crit});
+      if (!small) txt(ctx,"waiting to reconnect",L.cx1+10,y+27,{c:COL.dim,size:9.5});
+    }
+  });
+  // decode gate
+  rr(ctx,L.gx1,gy0,L.gx2-L.gx1,gy1-gy0,10); ctx.fillStyle=COL.gate; ctx.fill(); ctx.strokeStyle=COL.hi; ctx.stroke();
+  const gm=(L.gx1+L.gx2)/2;
+  txt(ctx,"decode",gm,gy0+22,{w:600,size:11.5,align:"center"});
+  ["split on \\n","≤ 1024 B/frame","parse JSON","check fields"].forEach((t,k)=>txt(ctx,t,gm,gy0+40+k*14,{c:COL.muted,size:9.5,align:"center"}));
+  txt(ctx,"frames",gm,gy0+112,{c:COL.dim,size:9.5,align:"center"}); txt(ctx,fmt(sim.m.frames),gm,gy0+127,{size:12,mono:true,align:"center",w:600});
+  rr(ctx,L.gx1+6,L.rejectY,L.gx2-L.gx1-12,64,8); ctx.fillStyle="rgba(248,81,73,.08)"; ctx.fill(); ctx.strokeStyle="rgba(248,81,73,.45)"; ctx.stroke();
+  txt(ctx,"REJECTED",gm,L.rejectY+17,{c:COL.crit,size:9.5,w:700,align:"center"});
+  txt(ctx,fmt(sim.m.invalid),gm,L.rejectY+36,{size:16,w:600,mono:true,align:"center"});
+  txt(ctx,"never queued",gm,L.rejectY+53,{c:COL.muted,size:9,align:"center"});
+  // router
+  ctx.beginPath();ctx.moveTo(L.rx,L.ry-24);ctx.lineTo(L.rx+18,L.ry);ctx.lineTo(L.rx,L.ry+24);ctx.lineTo(L.rx-18,L.ry);ctx.closePath();
+  ctx.fillStyle=COL.gate;ctx.fill();ctx.strokeStyle=COL.hi;ctx.stroke();
+  txt(ctx,"#",L.rx,L.ry+4,{c:COL.accent,size:12,w:700,mono:true,align:"center"});
+  const dropping=sim.rates().dropped>0;
+  rr(ctx,L.dropX-50,L.dropY-14,100,30,7); ctx.fillStyle=dropping?"rgba(248,81,73,.16)":"rgba(248,81,73,.05)"; ctx.fill(); ctx.strokeStyle=dropping?COL.crit:"rgba(248,81,73,.3)"; ctx.stroke();
+  txt(ctx,`dropped ${fmt(sim.m.dropped)}`,L.dropX,L.dropY+5,{c:dropping?COL.crit:COL.muted,size:10.5,mono:true,align:"center",w:dropping?700:400});
+  // shard queues
+  const cap=sim.scn.capacity;
+  sim.shards.forEach((sh,k)=>{const y=L.shardY[k], d=sim.depth(sh), frac=d/cap;
+    rr(ctx,L.qx1,y-17,L.qx2-L.qx1,34,8); ctx.fillStyle=COL.panel2; ctx.fill(); ctx.strokeStyle=frac>.9?COL.crit:COL.line2; ctx.stroke();
+    if (frac>0){ rr(ctx,L.qx1+1,y-16,Math.max(2,(L.qx2-L.qx1-2)*frac),32,7); ctx.fillStyle=frac>.9?"rgba(248,81,73,.22)":"rgba(77,163,255,.14)"; ctx.fill(); }
+    const cells=16, cw=(L.qx2-L.qx1-16)/cells;
+    for (let c2=0;c2<cells;c2++){ ctx.fillStyle="#16212e"; rr(ctx,L.qx1+8+c2*cw,y-8,cw-3,16,1.5); ctx.fill(); }
+    txt(ctx,`shard ${k}`,L.qx1,y-23,{c:COL.muted,size:10,mono:true});
+    txt(ctx,`${fmt(d)} / ${fmt(cap)}`,L.qx2,y-23,{c:frac>.9?COL.crit:COL.dim,size:10,mono:true,align:"right"});
+  });
+  // workers
+  sim.shards.forEach((sh,k)=>{const y=L.shardY[k], busy=now-sh.lastWork<0.12;
+    rr(ctx,L.wx1,y-24,L.wx2-L.wx1,48,9); ctx.fillStyle=busy?"#152338":COL.gate; ctx.fill(); ctx.strokeStyle=busy?COL.accent:COL.hi; ctx.stroke();
+    txt(ctx,`worker ${k}`,L.wx1+10,y-6,{w:600,size:11.5});
+    if (sh.batch.length>1) txt(ctx,`pop_batch: ${sh.batch.length}`,L.wx1,y-30,{c:COL.warn,size:9.5,mono:true});
+    const ids=sh.sensors, per=Math.min(ids.length,10);
+    for (let j=0;j<per;j++){ const s=sim.sensors[ids[j]]; ctx.beginPath(); ctx.arc(L.wx1+14+j*8.5,y+10,3.3,0,7); ctx.fillStyle=COL[sim.health(s.id)]; ctx.fill(); }
+    if (ids.length>per) txt(ctx,`+${ids.length-per}`,L.wx2-8,y+14,{c:COL.dim,size:9.5,align:"right"});
+  });
+  // outputs
+  L.outs.forEach((o,k)=>{ const pulse = k===2 ? Math.max(0,1-(now%1)/0.25) : k===0 ? Math.max(0,1-(now-sim.lastEventsAt)/0.4) : 0;
+    rr(ctx,L.ox1,o.y,L.ox2-L.ox1,40,9); ctx.fillStyle=pulse>0?`rgba(77,163,255,${0.06+0.12*pulse})`:COL.panel2; ctx.fill(); ctx.strokeStyle=pulse>0?COL.hi:COL.line2; ctx.stroke();
+    txt(ctx,o.t,L.ox1+10,o.y+17,{w:600,size:11.5}); txt(ctx,o.s,L.ox1+10,o.y+31,{c:COL.dim,size:9.5});
+    if (k===0) txt(ctx,fmt(sim.m.raised+sim.m.cleared),L.ox2-8,o.y+17,{c:COL.muted,size:10.5,mono:true,align:"right"});
+    if (k===1) txt(ctx,fmt(sim.m.processed),L.ox2-8,o.y+17,{c:COL.muted,size:10.5,mono:true,align:"right"});
+  });
+
+  // queued items get a slot index
+  for (const sh of sim.shards) sh.queue.forEach((m,i)=>m.qi=i);
+  // dots
+  for (const m of sim.msgs){
+    if (!m.traced && (m.stage==="conn" || (m.stage==="gate" && !m.malformed))) continue;  // inside a box: the box lights up instead
+    const p=dotPos(m, now); if (!p) continue;
+    let col = m.spark ? COL[m.sev]||COL.info : m.malformed && (m.stage==="gate"&&p.prog>.5||m.stage==="reject") ? COL.crit : m.stage==="drop" ? COL.crit : m.status==="fault" ? COL.fault : COL.accent;
+    const dim = tr && !m.traced ? .25 : 1;
+    ctx.globalAlpha=(p.a??1)*dim;
+    if (m.lost){ ctx.setLineDash([2,2]); ctx.strokeStyle=COL.muted; ctx.beginPath(); ctx.arc(p.x,p.y,4,0,7); ctx.stroke(); ctx.setLineDash([]); }
+    else {
+      ctx.beginPath(); ctx.arc(p.x,p.y,m.spark?5:6.5,0,7); ctx.fillStyle=col+"40"; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,m.spark?2.6:3.4,0,7); ctx.fillStyle=col; ctx.fill();
+      if (m.malformed && m.stage==="reject"){ ctx.strokeStyle=COL.crit; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(p.x-3,p.y-3);ctx.lineTo(p.x+3,p.y+3);ctx.moveTo(p.x+3,p.y-3);ctx.lineTo(p.x-3,p.y+3);ctx.stroke(); ctx.lineWidth=1.4; }
+    }
+    if (m.traced){ ctx.globalAlpha=1; ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(p.x,p.y,9+2*Math.sin(performance.now()/150),0,7); ctx.stroke(); ctx.lineWidth=1.4; tracing.pos=p; }
+  }
+  ctx.globalAlpha=1;
+  // hidden queue backlog indicator
+  sim.shards.forEach((sh,k)=>{ const hidden=sh.queue.filter(m=>m.stage==="queued").length-18; if (hidden>0) txt(ctx,`+${fmt(hidden)} waiting`,L.qx1+8,L.shardY[k]+29,{c:COL.crit,size:9.5,mono:true}); });
+}
+
+function dotPos(m, now){
+  const prog=Math.min(1,Math.max(0,(now-m.s0)/((m.s1-m.s0)||1))), e=ease(prog);
+  if (m.spark){
+    const sy=L.shardY[m.sensor.shard], target=L.outs[0];
+    if (m.fromStale) return {x:L.wx2+(L.ox1-L.wx2)*e, y:sy+(target.y+20-sy)*e, a:1-prog*.3};
+    return {x:bez(L.wx2,L.wx2+24,L.ox1-24,L.ox1+8,e), y:bez(sy,sy,target.y+20,target.y+20,e), a:1-prog*.3};
+  }
+  const i=m.sensor.idx, y=L.rowY(i), sy=L.shardY[m.sensor.shard];
+  switch (m.stage){
+    case "wire": return {x:L.sx2+(L.cx1-L.sx2)*prog, y, prog};
+    case "lost": return {x:L.sx2+(L.cx1-L.sx2-8)*Math.min(1,prog*1.4), y, a:1-prog, prog};
+    case "conn": return {x:L.cx1+(L.cx2-L.cx1-30)*prog, y, prog};
+    case "link": return {x:L.cx2-30+(L.gx1-L.cx2+30)*prog, y, prog};
+    case "gate": return {x:L.gx1+(L.gx2-L.gx1)*(m.malformed?prog*.5:prog), y, prog};
+    case "reject": return {x:(L.gx1+L.gx2)/2, y:y+(L.rejectY+30-y)*e, a:1-Math.max(0,prog-.7)/.3, prog};
+    case "route": return {x:bez(L.gx2,L.gx2+36,L.rx-40,L.rx-16,e), y:bez(y,y,L.ry,L.ry,e), prog};
+    case "drop": return {x:L.rx, y:L.ry+(L.dropY-18-L.ry)*e, a:1-Math.max(0,prog-.6)/.4, prog};
+    case "toQueue": return {x:bez(L.rx+16,L.rx+40,L.qx1-30,L.qx1+6,e), y:bez(L.ry,L.ry,sy,sy,e), prog};
+    case "queued": { if (m.qi>=18) return null; const target=L.qx2-12-m.qi*9; const k2=Math.min(1,(now-m.s0)/0.12); return {x:L.qx1+6+(target-L.qx1-6)*ease(k2), y:sy}; }
+    case "work": return {x:L.qx2-12+((L.wx1+L.wx2)/2-L.qx2+12)*e, y:sy, a:1-Math.max(0,prog-.75)/.25, prog};
+  }
+  return null;
+}
+
+/* ---------- metrics panel ---------- */
+const fmt=n=>Math.round(n).toLocaleString("en-US");
+function svgEl(tag,a,parent){const e=document.createElementNS("http://www.w3.org/2000/svg",tag);for(const k in a)e.setAttribute(k,a[k]);parent&&parent.appendChild(e);return e}
+
+function drawThroughput(){
+  const svg=$("thr"), w=svg.clientWidth-28||400, h=74; svg.setAttribute("viewBox",`0 0 ${w} ${h}`); svg.innerHTML="";
+  const pts=[]; for (let i=2;i<sim.thr.length;i++){ const a=sim.thr[i], b=sim.thr[i-2]; const d=a.t-b.t; pts.push({t:a.t, f:(a.frames-b.frames)/d, p:(a.processed-b.processed)/d}); }
+  const span=30, t1=Math.max(span,sim.t), t0=t1-span;
+  const vis=pts.filter(p=>p.t>=t0); const maxV=Math.max(50,...vis.map(p=>Math.max(p.f,p.p)))*1.15;
+  const x=t=>(t-t0)/span*w, y=v=>h-12-(v/maxV)*(h-24);
+  for (const g of [0.5,1]){ svgEl("line",{x1:0,x2:w,y1:y(maxV*g/1.15),y2:y(maxV*g/1.15),stroke:COL.line,"stroke-dasharray":"2 4"},svg); }
+  svgEl("text",{x:w,y:y(maxV/1.15)-3,fill:COL.dim,"font-size":9.5,"text-anchor":"end","font-family":MONO},svg).textContent=fmt(maxV/1.15);
+  if (vis.length>1){
+    const path=k=>"M"+vis.map(p=>x(p.t).toFixed(1)+" "+y(p[k]).toFixed(1)).join(" L");
+    svgEl("path",{d:path("p")+` L${x(vis[vis.length-1].t)} ${h-12} L${x(vis[0].t)} ${h-12} Z`,fill:"rgba(77,163,255,.12)"},svg);
+    svgEl("path",{d:path("f"),fill:"none",stroke:COL.muted,"stroke-width":1.3,"stroke-dasharray":"3 2"},svg);
+    svgEl("path",{d:path("p"),fill:"none",stroke:COL.accent,"stroke-width":1.7},svg);
+  }
+  let lastLbl=-99;
+  for (const mk of sim.scn.markers) if (mk.t>=t0 && mk.t<=sim.t){ const xx=x(mk.t); svgEl("line",{x1:xx,x2:xx,y1:4,y2:h-12,stroke:COL.dim,"stroke-dasharray":"2 3"},svg);
+    if (xx-lastLbl>56){ svgEl("text",{x:xx+3,y:10,fill:COL.dim,"font-size":9},svg).textContent=mk.label; lastLbl=xx; } }
+  svgEl("text",{x:0,y:h-1,fill:COL.dim,"font-size":9.5},svg).textContent="— processed   - - received";
+  svgEl("text",{x:w,y:h-1,fill:COL.dim,"font-size":9.5,"text-anchor":"end","font-family":MONO},svg).textContent=`last ${span}s`;
+}
+
+function drawLatency(){
+  const svg=$("lat"), w=svg.clientWidth-28||400, h=104; svg.setAttribute("viewBox",`0 0 ${w} ${h}`); svg.innerHTML="";
+  const s=sim.latStats(sim.lat), lo=Math.log10(50), hi=Math.log10(2e6), B=28, bins=new Array(B).fill(0);
+  for (const l of sim.lat){ const b=Math.floor((Math.log10(Math.max(50,l.us))-lo)/(hi-lo)*B); bins[Math.min(B-1,Math.max(0,b))]++; }
+  const mx=Math.max(1,...bins), bw=w/B, X=us=>(Math.log10(us)-lo)/(hi-lo)*w;
+  bins.forEach((v,i)=>{ if(!v) return; const bh=v/mx*56, edge=Math.pow(10,lo+(i+.5)/B*(hi-lo));
+    svgEl("rect",{x:i*bw+1,y:72-bh,width:bw-2,height:bh,rx:2,fill:edge>s.p99?COL.crit:edge>s.p95?COL.warn:COL.accent,opacity:.85},svg); });
+  svgEl("line",{x1:0,x2:w,y1:72,y2:72,stroke:COL.line2},svg);
+  [[100,"100µs"],[1000,"1ms"],[1e4,"10ms"],[1e5,"100ms"],[1e6,"1s"]].forEach(([v,l])=>svgEl("text",{x:X(v),y:85,fill:COL.dim,"font-size":9.5,"text-anchor":"middle","font-family":MONO},svg).textContent=l);
+  if (s.n){
+    let lastX=-99;
+    [["p50",s.p50],["p95",s.p95],["p99",s.p99]].forEach(([k,v])=>{ const xx=X(Math.max(50,v)); svgEl("line",{x1:xx,x2:xx,y1:6,y2:72,stroke:COL.text,"stroke-opacity":.45,"stroke-dasharray":"2 2"},svg);
+      const tx=Math.min(xx+3,w-22); if (tx-lastX<26) return; lastX=tx; svgEl("text",{x:tx,y:12,fill:COL.text,"font-size":10,"font-family":MONO},svg).textContent=k; });
+  }
+  svgEl("text",{x:w,y:h-2,fill:COL.dim,"font-size":10,"text-anchor":"end","font-family":MONO},svg).textContent=s.n?`n=${fmt(s.n)} · p50 ${us(s.p50)} · p99 ${us(s.p99)} · max ${us(s.max)}`:"no samples";
+}
+const us=v=>v>=1e6?(v/1e6).toFixed(2)+" s":v>=1e3?(v/1e3).toFixed(v>=1e4?0:1)+" ms":Math.round(v)+" µs";
+
+function updateMetrics(){
+  const m=sim.m, r=sim.rates();
+  $("mRecv").textContent=fmt(m.frames); $("mRecvR").textContent=`${fmt(r.frames)} msg/s`;
+  $("mProc").textContent=fmt(m.processed); $("mProcR").textContent=`${fmt(r.processed)} msg/s`;
+  const active=sim.sensors.filter(s=>s.connected).length;
+  $("mConn").innerHTML=`${active}<small> / ${sim.sensors.length}</small>`;
+  $("mConnS").textContent=`accepted ${m.accepted}`+(active<sim.sensors.length&&m.accepted?` · ${sim.sensors.length-active} down`:"");
+  $("mInv").textContent=fmt(m.invalid); $("mInv").style.color=m.invalid?COL.crit:"";
+  $("mDrop").textContent=fmt(m.dropped); $("mDrop").style.color=m.dropped?COL.crit:"";
+  $("mSeq").textContent=fmt(m.seqMissing); $("mSeq").style.color=m.seqMissing?COL.warn:"";
+  $("mInvS").textContent=m.rejected?`+${m.rejected} rejected by rules`:"malformed frames";
+  const h=sim.summary();
+  $("health").innerHTML=["ok","warning","critical","fault","stale"].map(k=>h[k]?`<div style="flex:${h[k]};background:${COL[k]}"></div>`:"").join("");
+  $("healthL").innerHTML=`<span><b>${h.ok}</b> ok</span><span><b>${h.warning}</b> warning</span><span><b>${h.critical}</b> critical</span><span><b>${h.fault}</b> fault</span><span><b>${h.stale}</b> stale</span>`;
+  drawThroughput(); drawLatency();
+}
+
+/* ---------- sensor cards ---------- */
+const cardEls=new Map();  // by sensor id: survives seeking, which rebuilds the Sim
+function buildCards(){
+  const box=$("cards"); box.innerHTML=""; cardEls.clear();
+  for (const s of sim.sensors){
+    const el=document.createElement("button"); el.className="card h-ok"; el.dataset.id=s.id;
+    el.innerHTML=`<div style="min-width:0"><div class="id mono">${s.id}</div><div class="ty"></div><div class="val mono"></div></div><svg width="150" height="58" viewBox="0 0 150 58"></svg>`;
+    el.onclick=ev=>{ selectSensor(s.id); openInject(el); ev.stopPropagation(); };
+    box.appendChild(el); cardEls.set(s.id, el);
+  }
+}
+function updateCards(){
+  const now=sim.t;
+  for (const s of sim.sensors){
+    const el=cardEls.get(s.id), st=sim.registry.get(s.id), h=st?healthOf(st.active):"ok";
+    el.className=`card h-${h}`+(selected===s.id?" sel":"");
+    const conds=st?CONDITIONS.filter(c=>st.active.has(c)):[];
+    const mode=s.model.failMode(now);
+    const extra=conds.length?`<span style="color:var(--c)">${conds.join(" · ")}</span>`:mode?`<span style="color:var(--muted)">${mode==="fault_status"?"status=fault":mode}</span>`:"";
+    el.children[0].children[1].innerHTML=s.type+(extra?" · "+extra:"");
+    const dec=s.type==="motor_speed"?0:1;
+    el.children[0].children[2].innerHTML=st?`${st.lastValue.toFixed(dec)} <small>${UNITS[s.type]}</small><span class="badge">${h}</span>`:`<small>waiting…</small>`;
+    drawSpark(el.children[1], sim.series.get(s.id), s, now);
+  }
+}
+function drawSpark(svg, ser, s, now){
+  svg.innerHTML=""; if (!ser.length) return;
+  const W=150,H=58, span=20, tNow=Math.max(0,now-LAG), t0=Math.max(0,tNow-span), t1=Math.max(span,tNow);
+  const st=sim.registry.get(s.id), quiet=st && now-st.lastAccepted>0.6;
+  const vis=ser.filter(p=>p.t>=t0); if(!vis.length) return;
+  let lo=Math.min(...vis.map(p=>p.v)), hi=Math.max(...vis.map(p=>p.v));
+  const sd=s.spec.noise_stddev||1; const pad=Math.max((hi-lo)*.12, sd*3); lo-=pad; hi+=pad;
+  const T=THRESHOLDS[s.type], lines=[];
+  for (const [v,c] of [[T.warn_high,COL.warn],[T.crit_high,COL.crit],[T.warn_low,COL.warn],[T.crit_low,COL.crit]]){
+    const span2=hi-lo; if (v>=lo-span2*.6 && v<=hi+span2*.6){ lines.push([v,c]); lo=Math.min(lo,v-span2*.05); hi=Math.max(hi,v+span2*.05); }
+  }
+  const x=t=>2+(t-(t1-span))/span*(W-8), y=v=>H-4-(v-lo)/(hi-lo)*(H-8);
+  for (const [v,c] of lines) svgEl("line",{x1:0,x2:W,y1:y(v),y2:y(v),stroke:c,"stroke-dasharray":"3 3","stroke-opacity":.7},svg);
+  // break the line where data is missing (silent / disconnected) and shade the gap
+  let seg=[], segs=[];
+  for (let i=0;i<vis.length;i++){ if (i && vis[i].t-vis[i-1].t>Math.max(0.6,4/s.spec.rate_hz)){ segs.push(seg); seg=[]; } seg.push(vis[i]); }
+  segs.push(seg);
+  for (let i=1;i<segs.length;i++){ const a=segs[i-1][segs[i-1].length-1].t, b=segs[i][0].t; svgEl("rect",{x:x(a),y:2,width:Math.max(1,x(b)-x(a)),height:H-4,fill:"rgba(125,135,150,.12)"},svg); }
+  const last=vis[vis.length-1];
+  if (quiet && tNow>last.t){ svgEl("rect",{x:x(last.t),y:2,width:Math.max(1,x(tNow)-x(last.t)),height:H-4,fill:"rgba(125,135,150,.12)",stroke:"rgba(125,135,150,.35)","stroke-dasharray":"3 3"},svg);
+    if (x(tNow)-x(last.t)>34) svgEl("text",{x:(x(last.t)+x(tNow))/2,y:H/2+3,fill:COL.stale,"font-size":9,"text-anchor":"middle"},svg).textContent="no data"; }
+  for (const sg of segs){
+    // colour each run by the health it produced
+    let run=[sg[0]];
+    const flush=()=>{ if(run.length>1){ const st=run[run.length-1].s; svgEl("path",{d:"M"+run.map(p=>x(p.t).toFixed(1)+" "+y(p.v).toFixed(1)).join(" L"),fill:"none",stroke:st==="ok"?COL.accent:COL[st],"stroke-width":1.3},svg);} };
+    for (let i=1;i<sg.length;i++){ run.push(sg[i]); if (sg[i].s!==sg[i-1].s){ flush(); run=[sg[i]]; } }
+    flush();
+  }
+  svgEl("circle",{cx:x(last.t),cy:y(last.v),r:2.6,fill:last.s==="ok"?COL.accent:COL[last.s]},svg);
+}
+
+/* ---------- event log + console ---------- */
+let shownEvent=0, logFilter="alarms";
+function eventHtml(e){
+  const sev=sevOf(e), label={warn:e.kind==="gap"?"GAP":e.kind==="reject"?"REJECT":"WARN",crit:e.kind==="invalid"?"INVALID":"CRIT",fault:"FAULT",stale:"STALE",clear:"CLEAR",info:"NET",user:"USER"}[sev];
+  let msg="";
+  const unit=UNITS[sim.sensors.find(s=>s.id===e.id)?.type]||"";
+  const val=v=>v==null?"":`${Math.abs(v)>=1000?v.toFixed(0):v.toFixed(2)} ${unit}`;
+  if (e.kind==="raised"){
+    const T=THRESHOLDS[sim.sensors.find(s=>s.id===e.id).type];
+    const why={warn_high:`${val(e.value)} > ${T.warn_high}`,crit_high:`${val(e.value)} > ${T.crit_high}`,warn_low:`${val(e.value)} < ${T.warn_low}`,crit_low:`${val(e.value)} < ${T.crit_low}`,
+      rate_of_change:e.rate!=null?`${e.rate.toFixed(1)} ${unit}/s > ${T.max_rate_per_s}`:"",trend:e.slope!=null?`slope ${e.slope>0?"+":""}${e.slope.toFixed(2)} ${unit}/s`:"",
+      sensor_fault:"status=fault",stale:`no data for ${(e.age*1000).toFixed(0)} ms`}[e.cond]||"";
+    msg=`<b>${e.id}</b> ${e.cond} raised <span>${why}</span>`;
+  } else if (e.kind==="cleared") msg=`<b>${e.id}</b> ${e.cond} cleared <span>${val(e.value)}</span>`;
+  else if (e.kind==="gap") msg=`<b>${e.id}</b> sequence gap <span>${e.count} missing</span>`;
+  else if (e.kind==="reject") msg=`<b>${e.id}</b> rejected <span>${e.reason} · ${val(e.value)}</span>`;
+  else if (e.kind==="invalid") msg=`<b>${e.id}</b> <span>${e.text} (total ${e.count})</span>`;
+  else msg=`<b>${e.id}</b> <span>${e.text}</span>`;
+  const c={warn:"var(--warn)",crit:"var(--crit)",fault:"var(--fault)",stale:"var(--stale)",clear:"var(--ok)",info:"var(--muted)",user:"var(--accent)"}[sev];
+  return `<span class="t">${e.t.toFixed(2)}s</span><span class="sv" style="--c:${c}">${label}</span><span class="m">${msg}</span>`;
+}
+function updateLog(reset){
+  const box=$("log");
+  if (reset){ box.innerHTML=""; shownEvent=0; }
+  const all=sim.events.filter(e=>e.n>shownEvent); if (all.length) shownEvent=all[all.length-1].n;
+  const fresh=logFilter==="all"?all:all.filter(e=>!isNoise(e));
+  if (!fresh.length){ if(!box.children.length) box.innerHTML=`<div class="empty">No events yet. Edge-triggered events appear here when a condition is raised or cleared.</div>`; return; }
+  if (box.querySelector(".empty")) box.innerHTML="";
+  const frag=document.createDocumentFragment();
+  for (const e of fresh.slice(-60).reverse()){ const d=document.createElement("div"); d.className="ev"+(reset?"":" new"); d.innerHTML=eventHtml(e); frag.appendChild(d); }
+  box.prepend(frag);
+  while (box.children.length>120) box.lastChild.remove();
+}
+
+/* ---------- trace mode ---------- */
+const TRACE_STEPS=["sent","conn","gate","routed","processed","done"];
+function traceText(m, stage){
+  const s=m.sensor, sh=s.shard, T=THRESHOLDS[m.type], u=UNITS[m.type];
+  const frame=`{"id":"${m.id}","seq":${m.seq},"status":"${m.status}","ts":${Math.round(WALL0+(m.ts||0)*1e6)},"type":"${m.type}","value":${(m.value??0).toFixed(3)}}`;
+  switch(stage){
+    case "sent": return {n:1,title:"Sensor thread produces a reading",src:"src/sim/sensor_model.cpp · simulator.cpp",
+      body:`<p><b>${m.id}</b> wakes at its next deadline (${s.spec.rate_hz} Hz). <span class="mono">SensorModel::next()</span> computes nominal + drift + Gaussian noise${m.spiked?" <b>+ an injected spike</b>":""}, then applies any configured faults.</p><code>${frame}</code><p>The frame is one JSON line. <span class="mono">send_all()</span> writes it to the TCP socket, retrying on partial writes and EINTR.</p>`};
+    case "lost": return {n:1,title:"Lost before it reached the server",src:"src/sim/sensor_model.cpp",end:true,
+      body:`<p>The model decided to <b>drop</b> sample seq ${m.seq} (lossy link or disconnected socket). The sequence number still advanced.</p><p>The server never sees this message. It finds out later when the next one arrives with a <b>sequence gap</b>, which is counted in <span class="mono">seq_missing</span>.</p>`};
+    case "conn": return {n:2,title:"Connection thread receives the bytes",src:"src/net/tcp_server.cpp · protocol/line_framer.hpp",
+      body:`<p>Connection thread <b>#${s.conn}</b> wakes from <span class="mono">poll()</span> and <span class="mono">recv()</span>s into a 16 KiB buffer. TCP is a byte stream, so a frame may arrive split or merged with others.</p><p><span class="mono">LineFramer</span> buffers bytes until it sees <span class="mono">'\\n'</span> and never holds more than <span class="mono">max_frame_bytes</span> (1024). This frame is ${frame.length+1} bytes.</p>`};
+    case "gate": return {n:3,title:m.malformed?"Decode fails":"Decode and validate",src:"src/protocol/protocol.cpp",
+      body:m.malformed?`<p>The frame was corrupted by fault injection, so the JSON parse or schema check fails.</p>`:`<p><span class="mono">protocol::decode()</span> parses the JSON, requires id, type, value, ts and seq, checks that the id is valid, the type and status are known and the value is finite, and builds a <span class="mono">TelemetryMessage</span>.</p><p>This runs on the network thread, so <b>bad input never uses up queue space</b>.</p>`};
+    case "rejected": return {n:3,title:"Rejected at decode",src:"src/app/telemetry_service.cpp",end:true,
+      body:`<p>The malformed frame is counted in <span class="mono">invalid</span> (now ${sim.m.invalid}), logged with rate limiting, and discarded. It never reaches a queue or a worker.</p><p>Its sequence number is used up, so the next good frame from ${m.id} shows up as a 1-message gap.</p>`};
+    case "routed": { const q=sim.depth(sim.shards[sh]);
+      return {n:4,title:`Routed to shard ${sh}`,src:"src/processing/processing_engine.cpp",
+      body:`<p><span class="mono">shard = hash("${m.id}") % ${sim.workers} = ${sh}</span>. The same sensor always goes to the same shard, so its readings stay in order and its state is owned by a single worker thread.</p><p><span class="mono">try_push()</span> succeeded (depth ${q} / ${fmt(sim.scn.capacity)}). If the queue were full, the newest message would be <b>dropped and counted</b>. The network thread never blocks.</p>`}; }
+    case "dropped": return {n:4,title:"Queue full: dropped",src:"src/processing/processing_engine.cpp",end:true,
+      body:`<p>Shard ${sh} is at capacity (${fmt(sim.scn.capacity)}). The server's policy is to <b>drop the newest message</b> and count it, rather than block the connection thread or grow memory without limit.</p><p>Dropped so far: <b>${fmt(sim.m.dropped)}</b>.</p>`};
+    case "processed": { const d=m.detail||{};
+      if (d.reason) return {n:5,title:`Worker ${sh} rejects the reading`,src:"src/processing/anomaly_detector.cpp",
+        body:`<p>Semantic validation failed: <b>${d.reason}</b>. ${m.value.toFixed(2)} ${u} is outside the physical range ${T.valid_min}…${T.valid_max}, so it is treated as a bad reading rather than a real alarm.</p>`};
+      const act=d.active.length?d.active.join(", "):"none";
+      return {n:5,title:`Worker ${sh} runs the detector`,src:"src/processing/sensor_registry.cpp · anomaly_detector.cpp",
+      body:`<p><span class="mono">pop_batch()</span> takes up to 64 items per lock. For this reading:</p><p>✓ range ${T.valid_min}…${T.valid_max} ${u} · seq ${m.seq} increases<br>${d.missing?`⚠ <b>gap: ${d.missing} missing</b>`:"✓ no sequence gap"}<br>· rate ${d.rate!=null?d.rate.toFixed(2):"–"} ${u}/s (limit ${T.max_rate_per_s})<br>· trend ${d.slope!=null?(d.slope>0?"+":"")+d.slope.toFixed(3):"– (needs 10 samples)"} ${d.slope!=null?u+"/s":""} (limit ${T.max_trend_per_s})<br>· limits ${T.warn_low}…${T.warn_high} warn, ${T.crit_low}…${T.crit_high} crit</p><p>Active conditions: <b>${act}</b>. Events are emitted only when a condition is <b>raised or cleared</b>.</p>`}; }
+    case "done": return {n:6,title:"Metrics recorded",src:"src/metrics · app/status_reporter.cpp",end:true,
+      body:`<p><span class="mono">processed++</span>. The server-side latency for this message was <b>${us(m.latencyUs)}</b>${m.waitUs>1?`, including ${us(m.waitUs)} waiting in the queue`:""}, recorded in a wait-free histogram (relaxed atomics, no lock).</p><p>Once a second the status reporter reads these counters and prints the block shown in the <b>Status console</b> tab.</p>`};
+  }
+}
+function startTrace(){
+  if (tracing){ endTrace(); return; }
+  const cand = selected || sim.sensors.find(s=>s.connected && sim.health(s.id)==="ok")?.id || sim.sensors[0].id;
+  tracing={want:cand, msg:null}; sim.trace=tracing; selectSensor(cand);
+  $("traceBtn").classList.add("on"); $("traceBtn").textContent="Stop trace";
+  if (!playing) togglePlay();
+}
+function endTrace(){
+  tracing=null; if (sim) sim.trace=null; $("trace").hidden=true; $("traceBtn").classList.remove("on"); $("traceBtn").textContent="Trace a message";
+}
+function onTrace(m, stage){
+  const info=traceText(m, stage); if(!info) return;
+  sim.halt=true; tracing.paused=true; tracing.stage=stage; tracing.info=info; playing=false; syncPlay();
+  requestAnimationFrame(()=>{ render(true); showTraceCard(); });
+}
+function showTraceCard(){
+  const box=$("trace"), info=tracing.info, p=tracing.pos||{x:540,y:200};
+  box.innerHTML=`<div class="step">Step ${info.n} of 6 · ${tracing.msg.id} · seq ${tracing.msg.seq}</div><h3>${info.title}</h3>${info.body}<div class="src">${info.src}</div>
+    <div class="row"><div class="dots">${[1,2,3,4,5,6].map(i=>`<i class="${i<=info.n?"on":""}"></i>`).join("")}</div>
+    <div style="display:flex;gap:6px"><button class="btn" id="trStop">Close</button><button class="btn primary" id="trNext">${info.end?"Done":"Next →"}</button></div></div>`;
+  box.hidden=false;
+  const c=$("pipe"), sc=c._css, wrapW=$("wrap").clientWidth;
+  let left=10+p.x*sc+18, top=4+p.y*sc-30;
+  if (left+box.offsetWidth>wrapW-6) left=10+p.x*sc-box.offsetWidth-18;
+  left=Math.max(6,left); top=Math.max(4,Math.min(top,c.clientHeight-box.offsetHeight));
+  box.style.left=left+"px"; box.style.top=top+"px";
+  $("trStop").onclick=()=>{ endTrace(); if(!playing) togglePlay(); };
+  $("trNext").onclick=()=>{ box.hidden=true; if (info.end){ endTrace(); } if(!playing) togglePlay(); };
+}
+
+/* ---------- controls ---------- */
+function syncPlay(){ $("play").innerHTML=playing?'<svg width="12" height="12" aria-hidden="true"><rect x="2" y="1" width="3" height="10" fill="#e6edf3"/><rect x="7" y="1" width="3" height="10" fill="#e6edf3"/></svg>':'<svg width="12" height="12" aria-hidden="true"><path d="M3 1l8 5-8 5z" fill="#e6edf3"/></svg>'; }
+function togglePlay(){
+  if (tracing && tracing.paused){ $("trace").hidden=true; tracing.paused=false; if (tracing.info&&tracing.info.end) endTrace(); }
+  if (!playing && sim.t>=sim.scn.duration-0.01 && !sim.scn.loop) seek(0);
+  playing=!playing; $("done").hidden=true; syncPlay(); lastFrame=performance.now();
+}
+function selectSensor(id){ selected=id; $("injSensor").value=id; if (sim) updateCards(); }
+
+function loadScenario(key, t=0){
+  endTrace();
+  injections=[]; selected=null;
+  sim=new Sim(key, injections); sim.onTrace=onTrace;
+  L=layout(sim.sensors.length, sim.workers); setupCanvas();
+  document.querySelectorAll("#scenarios button").forEach(b=>b.classList.toggle("on",b.dataset.key===key));
+  $("story").innerHTML=sim.scn.story;
+  $("cfgHint").textContent=`${sim.workers} worker${sim.workers>1?"s":""} · queue ${fmt(sim.scn.capacity)}/shard`;
+  $("injSensor").innerHTML=sim.sensors.map(s=>`<option value="${s.id}">${s.id} (${s.type})</option>`).join("");
+  buildMarkers(); buildCards(); updateLog(true); $("console").textContent="(the first status block prints after 1 s)";
+  $("done").hidden=true;
+  if (t>0) sim.advanceTo(t);
+  render(true);
+  try{ const u=new URL(location.href); u.searchParams.set("scenario",key); history.replaceState(null,"",u); }catch(e){}
+}
+function seek(t){
+  const key=sim.key, inj=injections;
+  endTrace();
+  sim=new Sim(key, inj); sim.onTrace=onTrace;
+  sim.advanceTo(Math.max(0,Math.min(t, sim.scn.duration)));
+  updateLog(true); render(true);
+}
+function buildMarkers(){
+  const box=$("markers"); box.innerHTML="";
+  for (const mk of sim.scn.markers){
+    const b=document.createElement("button"); b.className="mk"+(mk.low?" low":""); b.style.left=(mk.t/sim.scn.duration*100)+"%"; b.style.color=mk.color; b.textContent=mk.label; b.title=`${mk.t}s: ${mk.note}`;
+    b.onclick=ev=>{ ev.stopPropagation(); seek(Math.max(0,mk.t-1)); if(!playing) togglePlay(); };
+    box.appendChild(b);
+  }
+}
+function openInject(anchor){
+  const pop=$("inject"); pop.hidden=false;
+  const r=(anchor||$("injectBtn")).getBoundingClientRect();
+  let left=Math.min(window.innerWidth-pop.offsetWidth-12, r.left), top=r.bottom+8;
+  if (top+pop.offsetHeight>window.innerHeight-8) top=Math.max(8,r.top-pop.offsetHeight-8);
+  pop.style.left=Math.max(12,left)+"px"; pop.style.top=top+"px";
+}
+function inject(act){
+  const id=$("injSensor").value; const inj={t:sim.t+DT, id, act};
+  injections.push(inj); sim.injections.push(inj); sim.injections.sort((a,b)=>a.t-b.t);
+  selectSensor(id); $("inject").hidden=true; if(!playing) togglePlay();
+}
+
+/* ---------- main loop ---------- */
+let lastSlow=0;
+function render(force){
+  drawPipeline();
+  const now=performance.now();
+  if (force || now-lastSlow>200){ lastSlow=now; updateMetrics(); updateCards(); updateLog(false); $("console").textContent=sim.status||"(the first status block prints after 1 s)"; }
+  const d=sim.scn.duration, f=Math.min(1,sim.t/d);
+  $("fill").style.width=(f*100)+"%"; $("knob").style.left=(f*100)+"%";
+  $("clock").innerHTML=`${sim.t.toFixed(1)}s <small>/ ${d}s${sim.scn.loop?" ↻":""}</small>`;
+}
+function frame(ts){
+  const dt=Math.min(0.1,(ts-lastFrame)/1000); lastFrame=ts;
+  if (playing){
+    sim.advanceTo(sim.t+dt*speed);
+    if (sim.t>=sim.scn.duration-1e-6){
+      if (sim.scn.loop){ injections=[]; seek(0); }
+      else { playing=false; syncPlay(); $("doneText").textContent=`${fmt(sim.m.processed)} messages processed, ${fmt(sim.m.raised)} alarms raised, ${fmt(sim.m.invalid)} malformed frames rejected, ${fmt(sim.m.dropped)} dropped.`; $("done").hidden=false; }
+    }
+  }
+  render(false);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- wiring ---------- */
+for (const [key, s] of Object.entries(SCENARIOS)){
+  const b=document.createElement("button"); b.textContent=s.label; b.dataset.key=key; b.setAttribute("role","tab");
+  b.onclick=()=>{ loadScenario(key); if(!playing) togglePlay(); }; $("scenarios").appendChild(b);
+}
+$("play").onclick=togglePlay;
+$("speed").onchange=e=>{ speed=+e.target.value; };
+$("traceBtn").onclick=startTrace;
+$("replay").onclick=()=>{ seek(0); playing=false; togglePlay(); };
+$("injectBtn").onclick=e=>{ e.stopPropagation(); const p=$("inject"); if (!p.hidden){ p.hidden=true; return; } if (!selected) selectSensor(sim.sensors[0].id); openInject(); };
+document.querySelectorAll("#inject .acts button").forEach(b=>b.onclick=()=>inject(b.dataset.act));
+$("inject").onclick=e=>e.stopPropagation();
+document.addEventListener("click",()=>{ $("inject").hidden=true; });
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{ document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b)); $("log").hidden=b.dataset.tab!=="log"; $("console").hidden=b.dataset.tab!=="console";
+  if (b.dataset.filter && b.dataset.filter!==logFilter){ logFilter=b.dataset.filter; updateLog(true); } });
+$("track").onclick=e=>{ const r=$("track").getBoundingClientRect(); const f=(e.clientX-r.left)/r.width; seek(f*sim.scn.duration); };
+$("pipe").addEventListener("click",e=>{
+  const r=$("pipe").getBoundingClientRect(), x=(e.clientX-r.left)/r.width*L.W, y=(e.clientY-r.top)/r.height*L.H;
+  if (x<L.cx2){ const i=Math.floor((y-L.top)/L.rowH); if (i>=0&&i<sim.sensors.length){ selectSensor(sim.sensors[i].id); e.stopPropagation(); openInject({getBoundingClientRect:()=>({left:e.clientX,bottom:e.clientY,top:e.clientY})}); } }
+});
+$("pipe").addEventListener("mousemove",e=>{ const r=$("pipe").getBoundingClientRect(), x=(e.clientX-r.left)/r.width*L.W; $("pipe").style.cursor=x<L.cx2?"pointer":"default"; });
+document.addEventListener("keydown",e=>{ if (e.code==="Space" && !/SELECT|BUTTON|INPUT/.test(document.activeElement.tagName)){ e.preventDefault(); togglePlay(); } });
+window.addEventListener("resize",()=>{ setupCanvas(); render(true); });
+
+const params=new URLSearchParams(location.search);
+const startKey=SCENARIOS[params.get("scenario")]?params.get("scenario"):"faults";
+loadScenario(startKey, +params.get("t")||0);
+syncPlay();
+// Hooks for rendering deterministic frames (used to record the README animation).
+window.__vis={ seekTo:t=>{ if (t<sim.t) seek(t); else sim.advanceTo(t); render(true); }, pause:()=>{ playing=false; syncPlay(); }, sim:()=>sim };
+if (params.has("capture")){ playing=false; syncPlay(); render(true); }
+else { lastFrame=performance.now(); requestAnimationFrame(frame); }
+</script>
+</body>
+</html>
