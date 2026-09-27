@@ -6,6 +6,13 @@ failing sensors, and reports system health, throughput and latency.
 
 **C++17 · Linux · POSIX sockets · std::thread · CMake · GoogleTest · Sanitizers · Docker · GitHub Actions**
 
+<a href="https://shivang1141.github.io/Real-Time-Sensor-Telemetry-and-Control-Simulator/"><img src="docs/visualizer-demo.gif" alt="Animated visualizer: sensor readings flow through connection threads, the decoder, sharded queues and workers while one sensor overheats, one goes silent, one disconnects and one reports a fault" width="100%"></a>
+
+**[▶ Open the interactive visualizer](https://shivang1141.github.io/Real-Time-Sensor-Telemetry-and-Control-Simulator/)**:
+watch every message move through the server, follow a single message step by step, or
+inject faults yourself and see how the server detects them. It runs in the browser with no
+install ([details](#interactive-visualizer)).
+
 > **Scope.** This is an independent educational project using synthetic data and public
 > tools. It is not flight or defense software, is not certified for any safety-critical
 > use, and makes no hard real-time guarantees. Latency is measured, not bounded.
@@ -54,6 +61,29 @@ failing sensors, and reports system health, throughput and latency.
 
 Full details are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): data flow, thread model,
 synchronization inventory, protocol, failure behavior and the shutdown sequence.
+
+## Interactive visualizer
+
+[`visualizer/index.html`](visualizer/index.html) is a single self-contained page
+([live version](https://shivang1141.github.io/Real-Time-Sensor-Telemetry-and-Control-Simulator/))
+that animates the pipeline above one message at a time:
+
+* **Three scenarios** from `config/`: a healthy fleet, the fault showcase, and an
+  under-provisioned server where the queue fills up and the drop-newest policy takes over.
+* **Trace a message** follows one reading through six steps: sensor thread, connection
+  thread, decode, routing, worker and metrics. Each step shows the real frame, shard,
+  detector inputs and the source file involved.
+* **Inject fault** applies a spike, overheat, silence, disconnect, fault status or lossy link
+  to any sensor while the scenario runs.
+* The **status console** tab prints the same status block as `telemetry_server`.
+
+It is a JavaScript model of the server, not the C++ binary. The sensor model, thresholds,
+validation, sequence-gap check, hysteresis, rate, trend and stale rules, the
+`hash(id) % N` sharding, `pop_batch(64)` and the drop-newest policy follow the C++ source.
+Each message's trip is slowed down so it can be followed on screen; real processing
+latency is about 160 µs. The overload scenario is scaled down 12.5× (800 msg/s instead of
+10k) so every message can be drawn. Runs are deterministic: the same scenario always plays
+out the same way. To run it locally, open the file in a browser.
 
 ## Quick start
 
@@ -178,7 +208,8 @@ tests/               unit/ and integration/ GoogleTest suites
 benchmarks/          component micro-benchmarks, load generator, recorded results
 config/              server, simulator and scenario configurations
 scripts/             demo, benchmark runner, results summarizer
-docs/                architecture, metrics, testing and performance write-ups
+docs/                architecture, metrics, testing and performance write-ups, diagrams
+visualizer/          interactive browser model of the pipeline (single HTML file)
 ```
 
 ## Known limitations
