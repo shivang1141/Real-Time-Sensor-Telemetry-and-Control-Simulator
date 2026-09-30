@@ -13,6 +13,10 @@ watch every message move through the server, follow a single message step by ste
 inject faults yourself and see how the server detects them. It runs in the browser with no
 install ([details](#interactive-visualizer)).
 
+New here? **[What is this project?](docs/WHAT_IS_THIS_PROJECT.md)** explains it in plain
+language, with every technology used. **[File structure](docs/FILE_STRUCTURE.md)** describes
+every file in the repository.
+
 > **Scope.** This is an independent educational project using synthetic data and public
 > tools. It is not flight or defense software, is not certified for any safety-critical
 > use, and makes no hard real-time guarantees. Latency is measured, not bounded.
@@ -211,6 +215,8 @@ scripts/             demo, benchmark runner, results summarizer
 docs/                architecture, metrics, testing and performance write-ups, diagrams
 visualizer/          interactive browser model of the pipeline (single HTML file)
 ```
+
+Every file is described in [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md).
 
 ## Known limitations
 
